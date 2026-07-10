@@ -2,7 +2,7 @@
 
 Aplicação desktop open source para mapear visualmente regiões de documentos PDF e, nas próximas etapas, extrair seus dados para planilhas.
 
-> Status: Etapa 2 concluída. A aplicação abre documentos PDF e renderiza a primeira página.
+> Status: Etapa 3 concluída. A aplicação abre documentos PDF, permite navegar pelas páginas e controlar o zoom.
 
 ## Requisitos
 
@@ -47,7 +47,7 @@ python -m pdf_extractor.main
 pytest
 ```
 
-Os testes verificam o serviço de PDF, o estado inicial da janela, as ações do menu e o carregamento da primeira página.
+Os testes verificam o serviço de PDF, o carregamento de documentos, a navegação entre páginas e os limites de zoom.
 
 ## Funcionalidades atuais
 
@@ -55,14 +55,16 @@ Os testes verificam o serviço de PDF, o estado inicial da janela, as ações do
 - menu `Arquivo` com as ações `Abrir PDF` e `Sair`;
 - mensagem de estado quando nenhum documento está carregado;
 - abertura e validação de documentos PDF;
-- renderização da primeira página com PyMuPDF;
+- renderização de páginas com PyMuPDF;
 - exibição do nome do arquivo e da quantidade de páginas;
+- navegação entre páginas com controles habilitados conforme os limites;
+- zoom entre 50% e 300%, com redefinição para 100%;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
 ## Roadmap imediato
 
-A Etapa 3 adicionará navegação entre páginas e controles de zoom.
+A Etapa 4 adicionará a seleção visual de regiões retangulares nas páginas.
 
 ## Licença
 

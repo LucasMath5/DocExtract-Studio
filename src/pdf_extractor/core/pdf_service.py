@@ -59,7 +59,7 @@ class PdfService:
 
         return PdfDocumentInfo(path.name, new_document.page_count)
 
-    def render_page(self, page_index: int = 0, scale: float = 1.5) -> bytes:
+    def render_page(self, page_index: int = 0, scale: float = 1.0) -> bytes:
         """Render a page as PNG bytes at the requested scale."""
         if self._document is None:
             raise PdfServiceError("Nenhum documento PDF está carregado.")

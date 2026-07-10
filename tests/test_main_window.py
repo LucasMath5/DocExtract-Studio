@@ -20,6 +20,16 @@ def application() -> Iterator[QApplication]:
     yield instance
 
 
+def create_synthetic_pdf(path: Path, page_count: int = 1) -> None:
+    """Create a generic multi-page PDF for interface tests."""
+    document = fitz.open()
+    for page_number in range(1, page_count + 1):
+        page = document.new_page()
+        page.insert_text((72, 72), f"Página sintética {page_number}")
+    document.save(path)
+    document.close()
+
+
 def test_main_window_has_expected_initial_state(application: QApplication) -> None:
     """The initial window should show its title, empty state, and file actions."""
     window = MainWindow()
@@ -28,6 +38,10 @@ def test_main_window_has_expected_initial_state(application: QApplication) -> No
     assert "Nenhum documento carregado" in window.pdf_viewer.page_label.text()
     assert window.open_pdf_action.text() == "Abrir PDF"
     assert window.exit_action.text() == "Sair"
+    assert window.pdf_viewer.page_indicator.text() == "Página 0 de 0"
+    assert not window.pdf_viewer.previous_button.isEnabled()
+    assert not window.pdf_viewer.next_button.isEnabled()
+    assert not window.pdf_viewer.zoom_in_button.isEnabled()
 
     window.close()
 
@@ -39,11 +53,7 @@ def test_open_pdf_action_loads_first_page(
 ) -> None:
     """The open action should load and display a synthetic PDF."""
     pdf_path = tmp_path / "exemplo.pdf"
-    document = fitz.open()
-    page = document.new_page()
-    page.insert_text((72, 72), "Documento sintético")
-    document.save(pdf_path)
-    document.close()
+    create_synthetic_pdf(pdf_path)
 
     monkeypatch.setattr(
         QFileDialog,
@@ -57,7 +67,88 @@ def test_open_pdf_action_loads_first_page(
     assert window.pdf_viewer.file_name_label.text() == "exemplo.pdf"
     assert window.pdf_viewer.page_label.pixmap() is not None
     assert not window.pdf_viewer.page_label.pixmap().isNull()
-    assert "1 página" in window.statusBar().currentMessage()
+    assert window.pdf_viewer.page_indicator.text() == "Página 1 de 1"
+    assert window.pdf_viewer.zoom_indicator.text() == "100%"
+    assert "Página 1 de 1" in window.statusBar().currentMessage()
+    window.close()
+
+
+def test_page_navigation_updates_controls(
+    application: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Navigation should reach every page and disable buttons at the limits."""
+    pdf_path = tmp_path / "tres_paginas.pdf"
+    create_synthetic_pdf(pdf_path, page_count=3)
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+
+    assert not window.pdf_viewer.previous_button.isEnabled()
+    assert window.pdf_viewer.next_button.isEnabled()
+
+    window.pdf_viewer.next_button.click()
+    assert window.pdf_viewer.page_indicator.text() == "Página 2 de 3"
+    assert window.pdf_viewer.previous_button.isEnabled()
+
+    window.pdf_viewer.next_button.click()
+    assert window.pdf_viewer.page_indicator.text() == "Página 3 de 3"
+    assert not window.pdf_viewer.next_button.isEnabled()
+
+    window.pdf_viewer.previous_button.click()
+    assert window.pdf_viewer.page_indicator.text() == "Página 2 de 3"
+    window.close()
+
+
+def test_zoom_controls_respect_limits_and_reset(
+    application: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Zoom should render, clamp to its limits, and reset to 100 percent."""
+    pdf_path = tmp_path / "zoom.pdf"
+    create_synthetic_pdf(pdf_path)
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    original_width = window.pdf_viewer.page_label.pixmap().width()
+
+    window.pdf_viewer.zoom_in_button.click()
+    assert window.pdf_viewer.zoom_indicator.text() == "125%"
+    assert window.pdf_viewer.page_label.pixmap().width() > original_width
+    assert window.pdf_viewer.reset_zoom_button.isEnabled()
+
+    window.pdf_viewer.reset_zoom_button.click()
+    assert window.pdf_viewer.zoom_indicator.text() == "100%"
+    assert not window.pdf_viewer.reset_zoom_button.isEnabled()
+
+    window._set_zoom(1)
+    assert window.pdf_viewer.zoom_indicator.text() == "50%"
+    assert not window.pdf_viewer.zoom_out_button.isEnabled()
+
+    window._set_zoom(999)
+    assert window.pdf_viewer.zoom_indicator.text() == "300%"
+    assert not window.pdf_viewer.zoom_in_button.isEnabled()
+    window.close()
+
+
+def test_opening_another_pdf_resets_page_and_zoom(
+    application: QApplication,
+    tmp_path: Path,
+) -> None:
+    """A new document should always start on page one at default zoom."""
+    first_pdf = tmp_path / "primeiro.pdf"
+    second_pdf = tmp_path / "segundo.pdf"
+    create_synthetic_pdf(first_pdf, page_count=2)
+    create_synthetic_pdf(second_pdf)
+    window = MainWindow()
+    window._load_pdf(first_pdf)
+    window.pdf_viewer.next_button.click()
+    window.pdf_viewer.zoom_in_button.click()
+
+    window._load_pdf(second_pdf)
+
+    assert window.pdf_viewer.page_indicator.text() == "Página 1 de 1"
+    assert window.pdf_viewer.zoom_indicator.text() == "100%"
+    assert not window.pdf_viewer.previous_button.isEnabled()
+    assert not window.pdf_viewer.next_button.isEnabled()
     window.close()
 
 

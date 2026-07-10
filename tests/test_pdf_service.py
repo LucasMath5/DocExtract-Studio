@@ -36,6 +36,34 @@ def test_open_and_render_first_page(tmp_path: Path) -> None:
     assert service.document_info is None
 
 
+def test_render_different_pages_and_scales(tmp_path: Path) -> None:
+    """The service should render any valid page at the requested scale."""
+    pdf_path = tmp_path / "paginas.pdf"
+    create_synthetic_pdf(pdf_path, page_count=2)
+    service = PdfService()
+    service.open_document(pdf_path)
+
+    first_page = fitz.Pixmap(service.render_page(0, scale=1.0))
+    second_page = fitz.Pixmap(service.render_page(1, scale=2.0))
+
+    assert second_page.width == first_page.width * 2
+    assert second_page.height == first_page.height * 2
+    service.close()
+
+
+def test_rejects_page_outside_document(tmp_path: Path) -> None:
+    """Rendering should reject indexes outside the loaded document."""
+    pdf_path = tmp_path / "documento.pdf"
+    create_synthetic_pdf(pdf_path)
+    service = PdfService()
+    service.open_document(pdf_path)
+
+    with pytest.raises(PdfServiceError, match="página solicitada não existe"):
+        service.render_page(1)
+
+    service.close()
+
+
 def test_rejects_non_pdf_extension(tmp_path: Path) -> None:
     """A file without the PDF extension should be rejected."""
     service = PdfService()
