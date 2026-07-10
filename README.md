@@ -2,7 +2,7 @@
 
 Aplicação desktop open source para mapear visualmente regiões de documentos PDF e, nas próximas etapas, extrair seus dados para planilhas.
 
-> Status: Etapa 1 concluída. A aplicação possui a estrutura inicial e a janela principal; a abertura de PDFs será implementada na Etapa 2.
+> Status: Etapa 2 concluída. A aplicação abre documentos PDF e renderiza a primeira página.
 
 ## Requisitos
 
@@ -47,18 +47,22 @@ python -m pdf_extractor.main
 pytest
 ```
 
-Os testes desta etapa verificam o estado inicial da janela e as ações do menu.
+Os testes verificam o serviço de PDF, o estado inicial da janela, as ações do menu e o carregamento da primeira página.
 
 ## Funcionalidades atuais
 
 - janela principal em PySide6;
-- menu `Arquivo` com as ações `Abrir PDF...` e `Sair`;
+- menu `Arquivo` com as ações `Abrir PDF` e `Sair`;
 - mensagem de estado quando nenhum documento está carregado;
+- abertura e validação de documentos PDF;
+- renderização da primeira página com PyMuPDF;
+- exibição do nome do arquivo e da quantidade de páginas;
+- mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
 ## Roadmap imediato
 
-A Etapa 2 adicionará a seleção, validação e renderização da primeira página de um PDF com PyMuPDF.
+A Etapa 3 adicionará navegação entre páginas e controles de zoom.
 
 ## Licença
 

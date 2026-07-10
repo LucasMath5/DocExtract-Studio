@@ -13,6 +13,7 @@ authors = [
     { name = "Visual PDF Data Extractor contributors" },
 ]
 dependencies = [
+    "PyMuPDF>=1.24,<2",
     "PySide6>=6.6,<7",
 ]
 classifiers = [
@@ -38,4 +39,3 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
-

@@ -16,7 +16,7 @@ LOGGER = logging.getLogger(__name__)
 def main() -> int:
     """Create the Qt application and start its event loop."""
     configure_logging()
-    LOGGER.info("Starting Visual PDF Data Extractor")
+    LOGGER.info("Iniciando Visual PDF Data Extractor")
 
     application = QApplication(sys.argv)
     application.setApplicationName("Visual PDF Data Extractor")
@@ -29,4 +29,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
