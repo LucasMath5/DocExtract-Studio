@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
 
 from pdf_extractor.app.pdf_viewer import PdfViewer
@@ -35,6 +36,7 @@ class MainWindow(QMainWindow):
 
         self._create_actions()
         self._create_menu()
+        self._create_keyboard_shortcuts()
         self._connect_viewer_controls()
         self.setCentralWidget(self.pdf_viewer)
         self.statusBar().showMessage("Pronto")
@@ -57,6 +59,22 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.open_pdf_action)
         file_menu.addSeparator()
         file_menu.addAction(self.exit_action)
+
+    def _create_keyboard_shortcuts(self) -> None:
+        """Register page navigation and zoom shortcuts for the window."""
+        shortcut_bindings = (
+            ("Left", self._show_previous_page),
+            ("Right", self._show_next_page),
+            ("Ctrl+-", self._zoom_out),
+            ("Ctrl++", self._zoom_in),
+            ("Ctrl+=", self._zoom_in),
+        )
+        self._keyboard_shortcuts: list[QShortcut] = []
+        for key_sequence, callback in shortcut_bindings:
+            shortcut = QShortcut(QKeySequence(key_sequence), self)
+            shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+            shortcut.activated.connect(callback)
+            self._keyboard_shortcuts.append(shortcut)
 
     def _connect_viewer_controls(self) -> None:
         """Connect page and zoom requests emitted by the PDF viewer."""

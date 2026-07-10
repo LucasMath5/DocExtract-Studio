@@ -8,6 +8,8 @@ from pathlib import Path
 
 import fitz
 import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from pdf_extractor.app.main_window import MainWindow
@@ -149,6 +151,42 @@ def test_opening_another_pdf_resets_page_and_zoom(
     assert window.pdf_viewer.zoom_indicator.text() == "100%"
     assert not window.pdf_viewer.previous_button.isEnabled()
     assert not window.pdf_viewer.next_button.isEnabled()
+    window.close()
+
+
+def test_keyboard_shortcuts_navigate_and_control_zoom(
+    application: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Arrow and Ctrl shortcuts should control pages and zoom."""
+    pdf_path = tmp_path / "atalhos.pdf"
+    create_synthetic_pdf(pdf_path, page_count=2)
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    window.show()
+    window.activateWindow()
+    window.setFocus()
+    application.processEvents()
+
+    QTest.keyClick(window, Qt.Key.Key_Right)
+    assert window.pdf_viewer.page_indicator.text() == "Página 2 de 2"
+
+    QTest.keyClick(window, Qt.Key.Key_Left)
+    assert window.pdf_viewer.page_indicator.text() == "Página 1 de 2"
+
+    QTest.keyClick(
+        window,
+        Qt.Key.Key_Plus,
+        Qt.KeyboardModifier.ControlModifier,
+    )
+    assert window.pdf_viewer.zoom_indicator.text() == "125%"
+
+    QTest.keyClick(
+        window,
+        Qt.Key.Key_Minus,
+        Qt.KeyboardModifier.ControlModifier,
+    )
+    assert window.pdf_viewer.zoom_indicator.text() == "100%"
     window.close()
 
 

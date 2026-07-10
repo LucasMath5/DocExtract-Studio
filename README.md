@@ -59,6 +59,7 @@ Os testes verificam o serviço de PDF, o carregamento de documentos, a navegaç�
 - exibição do nome do arquivo e da quantidade de páginas;
 - navegação entre páginas com controles habilitados conforme os limites;
 - zoom entre 50% e 300%, com redefinição para 100%;
+- atalhos `←` e `→` para navegar, `Ctrl++` e `Ctrl+-` para controlar o zoom;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 

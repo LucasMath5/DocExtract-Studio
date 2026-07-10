@@ -33,7 +33,7 @@ class PdfViewer(QWidget):
         self.file_name_label.setMaximumWidth(280)
 
         self.previous_button = QPushButton("Anterior")
-        self.previous_button.setToolTip("Exibir a página anterior")
+        self.previous_button.setToolTip("Exibir a página anterior (seta para esquerda)")
         self.previous_button.clicked.connect(self.previous_page_requested.emit)
 
         self.page_indicator = QLabel("Página 0 de 0")
@@ -41,7 +41,7 @@ class PdfViewer(QWidget):
         self.page_indicator.setMinimumWidth(105)
 
         self.next_button = QPushButton("Próxima")
-        self.next_button.setToolTip("Exibir a próxima página")
+        self.next_button.setToolTip("Exibir a próxima página (seta para direita)")
         self.next_button.clicked.connect(self.next_page_requested.emit)
 
         separator = QFrame()
@@ -49,7 +49,7 @@ class PdfViewer(QWidget):
         separator.setFrameShadow(QFrame.Shadow.Sunken)
 
         self.zoom_out_button = QPushButton("-")
-        self.zoom_out_button.setToolTip("Diminuir zoom")
+        self.zoom_out_button.setToolTip("Diminuir zoom (Ctrl+-)")
         self.zoom_out_button.setFixedWidth(36)
         self.zoom_out_button.clicked.connect(self.zoom_out_requested.emit)
 
@@ -58,7 +58,7 @@ class PdfViewer(QWidget):
         self.zoom_indicator.setMinimumWidth(52)
 
         self.zoom_in_button = QPushButton("+")
-        self.zoom_in_button.setToolTip("Aumentar zoom")
+        self.zoom_in_button.setToolTip("Aumentar zoom (Ctrl++)")
         self.zoom_in_button.setFixedWidth(36)
         self.zoom_in_button.clicked.connect(self.zoom_in_requested.emit)
 
