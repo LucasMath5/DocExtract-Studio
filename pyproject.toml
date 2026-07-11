@@ -36,6 +36,9 @@ visual-pdf-extractor = "pdf_extractor.main:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+pdf_extractor = ["resources/icons/*.ico", "resources/icons/*.png"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

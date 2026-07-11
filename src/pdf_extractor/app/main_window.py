@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
 
 from pdf_extractor.app.pdf_viewer import PdfViewer
 from pdf_extractor.core.pdf_service import PdfService, PdfServiceError
+from pdf_extractor.utils.app_icon import load_application_icon
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class MainWindow(QMainWindow):
         self._zoom_percent = self.DEFAULT_ZOOM
 
         self.setWindowTitle("Visual PDF Data Extractor")
+        self.setWindowIcon(load_application_icon())
         self.resize(1000, 700)
 
         self._create_actions()

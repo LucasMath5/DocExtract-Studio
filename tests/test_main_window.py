@@ -13,6 +13,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from pdf_extractor.app.main_window import MainWindow
+from pdf_extractor.utils.app_icon import application_icon_path, load_application_icon
 
 
 @pytest.fixture(scope="module")
@@ -37,6 +38,7 @@ def test_main_window_has_expected_initial_state(application: QApplication) -> No
     window = MainWindow()
 
     assert window.windowTitle() == "Visual PDF Data Extractor"
+    assert not window.windowIcon().isNull()
     assert "Nenhum documento carregado" in window.pdf_viewer.page_label.text()
     assert window.open_pdf_action.text() == "Abrir PDF"
     assert window.exit_action.text() == "Sair"
@@ -46,6 +48,19 @@ def test_main_window_has_expected_initial_state(application: QApplication) -> No
     assert not window.pdf_viewer.zoom_in_button.isEnabled()
 
     window.close()
+
+
+def test_application_icon_contains_windows_sizes(application: QApplication) -> None:
+    """The packaged icon should exist and expose small and large resolutions."""
+    icon_path = application_icon_path()
+    icon = load_application_icon()
+    available_sizes = {(size.width(), size.height()) for size in icon.availableSizes()}
+
+    assert icon_path.is_file()
+    assert not icon.isNull()
+    if icon_path.suffix == ".ico":
+        assert (16, 16) in available_sizes
+        assert (256, 256) in available_sizes
 
 
 def test_open_pdf_action_loads_first_page(
