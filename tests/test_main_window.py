@@ -13,6 +13,8 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 
 from pdf_extractor.app.main_window import MainWindow
+from pdf_extractor.core.template_service import TemplateService
+from pdf_extractor.models.extraction_field import ExtractionField
 from pdf_extractor.models.field_region import FieldRegion
 from pdf_extractor.utils.app_icon import application_icon_path, load_application_icon
 
@@ -43,6 +45,10 @@ def test_main_window_has_expected_initial_state(application: QApplication) -> No
     assert "Nenhum documento carregado" in window.pdf_viewer.page_canvas.text()
     assert window.open_pdf_action.text() == "Abrir PDF"
     assert window.exit_action.text() == "Sair"
+    assert window.new_template_action.text() == "Novo template"
+    assert window.save_template_action.text() == "Salvar template"
+    assert window.import_template_action.text() == "Importar template..."
+    assert window.export_template_action.text() == "Exportar template..."
     assert window.pdf_viewer.page_indicator.text() == "Página 0 de 0"
     assert not window.pdf_viewer.previous_button.isEnabled()
     assert not window.pdf_viewer.next_button.isEnabled()
@@ -566,6 +572,133 @@ def test_export_buttons_save_csv_and_excel(
     assert (tmp_path / "resultado_csv.csv").is_file()
     assert (tmp_path / "resultado_excel.xlsx").is_file()
     assert len(messages) == 2
+    window.close()
+
+
+def test_save_template_exports_current_fields_as_json(
+    application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Saving should name the mapping and create a portable JSON template."""
+    pdf_path = tmp_path / "origem_template.pdf"
+    create_synthetic_pdf(pdf_path)
+    destination = tmp_path / "template_cliente"
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    field = window.field_manager.create(
+        "Cliente",
+        FieldRegion(0, 20, 30, 160, 25),
+    )
+    window._selected_field_id = field.id
+    window._refresh_fields()
+    monkeypatch.setattr(
+        QInputDialog,
+        "getText",
+        lambda *args, **kwargs: ("Cadastro genérico", True),
+    )
+    monkeypatch.setattr(
+        QFileDialog,
+        "getSaveFileName",
+        lambda *args, **kwargs: (str(destination), "Templates JSON (*.json)"),
+    )
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+
+    window.save_template_action.trigger()
+
+    template_path = destination.with_suffix(".json")
+    template = TemplateService().load(template_path)
+    assert template.name == "Cadastro genérico"
+    assert template.fields == (field,)
+    assert window.template_controller.path == template_path
+    assert not window.template_controller.dirty
+    assert str(pdf_path) not in template_path.read_text(encoding="utf-8")
+    window.close()
+
+
+def test_import_edit_and_reuse_template_in_another_pdf(
+    application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Imported fields should be editable, saved, and kept for another PDF."""
+    template_path = tmp_path / "reutilizavel.json"
+    service = TemplateService()
+    original_field = ExtractionField(
+        "field-1",
+        "Cliente",
+        FieldRegion(0, 30, 40, 150, 25),
+    )
+    service.save(service.create("Cadastro", (original_field,)), template_path)
+    first_pdf = tmp_path / "primeiro_template.pdf"
+    second_pdf = tmp_path / "segundo_template.pdf"
+    create_synthetic_pdf(first_pdf)
+    create_synthetic_pdf(second_pdf)
+    window = MainWindow()
+    window._load_pdf(first_pdf)
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *args, **kwargs: (str(template_path), "Templates JSON (*.json)"),
+    )
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+
+    window.import_template_action.trigger()
+
+    assert window.field_manager.fields == (original_field,)
+    assert window.pdf_viewer.page_canvas.selection_display_rect() is not None
+    monkeypatch.setattr(
+        QInputDialog,
+        "getText",
+        lambda *args, **kwargs: ("Nome do cliente", True),
+    )
+    window._rename_field(original_field.id)
+    assert window.template_controller.dirty
+    window.save_template_action.trigger()
+    assert TemplateService().load(template_path).fields[0].name == "Nome do cliente"
+
+    window._load_pdf(second_pdf)
+
+    assert window.pdf_service.document_info is not None
+    assert window.pdf_service.document_info.file_name == second_pdf.name
+    assert [field.name for field in window.field_manager.fields] == [
+        "Nome do cliente"
+    ]
+    assert window.pdf_viewer.page_canvas.selection_display_rect() is not None
+    window.close()
+
+
+def test_import_invalid_template_shows_friendly_error(
+    application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Invalid template files should not replace the current fields."""
+    template_path = tmp_path / "invalido.json"
+    template_path.write_text("{ inválido", encoding="utf-8")
+    window = MainWindow()
+    existing = window.field_manager.create(
+        "Existente",
+        FieldRegion(0, 10, 20, 80, 20),
+    )
+    messages: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *args, **kwargs: (str(template_path), "Templates JSON (*.json)"),
+    )
+    monkeypatch.setattr(
+        QMessageBox,
+        "critical",
+        lambda parent, title, message: messages.append((title, message)),
+    )
+
+    window.import_template_action.trigger()
+
+    assert window.field_manager.fields == (existing,)
+    assert messages
+    assert messages[0][0] == "Template inválido"
+    assert "JSON inválido" in messages[0][1]
     window.close()
 
 

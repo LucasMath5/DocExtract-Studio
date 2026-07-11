@@ -56,6 +56,18 @@ class FieldManager:
         """Remove all fields."""
         self._fields.clear()
 
+    def replace_all(self, fields: tuple[ExtractionField, ...]) -> None:
+        """Replace all fields after validating identifiers and unique names."""
+        field_ids = [field.id for field in fields]
+        field_names = [field.name.casefold() for field in fields]
+        if len(field_ids) != len(set(field_ids)):
+            raise FieldValidationError(
+                "Os identificadores dos campos devem ser únicos."
+            )
+        if len(field_names) != len(set(field_names)):
+            raise FieldValidationError("Os nomes dos campos devem ser únicos.")
+        self._fields = list(fields)
+
     def _validated_name(self, name: str, ignored_id: str | None = None) -> str:
         normalized_name = name.strip()
         if not normalized_name:

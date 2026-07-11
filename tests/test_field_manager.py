@@ -80,3 +80,16 @@ def test_delete_and_clear_fields() -> None:
 
     manager.clear()
     assert manager.fields == ()
+
+
+def test_replace_all_restores_ordered_template_fields() -> None:
+    """A manager should restore fields from a validated template in order."""
+    manager = FieldManager()
+    fields = (
+        ExtractionField("field-2", "Data", region(1)),
+        ExtractionField("field-1", "Cliente", region()),
+    )
+
+    manager.replace_all(fields)
+
+    assert manager.fields == fields

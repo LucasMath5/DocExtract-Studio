@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from pdf_extractor.app.field_panel import FieldPanel
 from pdf_extractor.app.extraction_result_table import ExtractionResultTable
 from pdf_extractor.app.pdf_viewer import PdfViewer
+from pdf_extractor.app.template_controller import TemplateController
 from pdf_extractor.core.extraction_service import ExtractionService
 from pdf_extractor.core.field_manager import FieldManager, FieldValidationError
 from pdf_extractor.core.pdf_service import PdfService, PdfServiceError
@@ -49,6 +50,12 @@ class MainWindow(QMainWindow):
         self.pdf_service = pdf_service or PdfService()
         self.extraction_service = ExtractionService(self.pdf_service)
         self.field_manager = FieldManager()
+        self.template_controller = TemplateController(
+            self,
+            lambda: self.field_manager.fields,
+        )
+        self.template_controller.fields_replaced.connect(self._replace_fields)
+        self.template_controller.state_changed.connect(self._update_document_state)
         self.pdf_viewer = PdfViewer()
         self.field_panel = FieldPanel()
         self.result_table = ExtractionResultTable()
@@ -78,6 +85,11 @@ class MainWindow(QMainWindow):
         self.open_pdf_action.setStatusTip("Abrir um documento PDF")
         self.open_pdf_action.triggered.connect(self._select_pdf)
 
+        self.new_template_action = self.template_controller.new_action
+        self.save_template_action = self.template_controller.save_action
+        self.import_template_action = self.template_controller.import_action
+        self.export_template_action = self.template_controller.export_action
+
         self.exit_action = QAction("Sair", self)
         self.exit_action.setShortcut("Ctrl+Q")
         self.exit_action.setStatusTip("Fechar a aplicação")
@@ -89,6 +101,13 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.open_pdf_action)
         file_menu.addSeparator()
         file_menu.addAction(self.exit_action)
+
+        template_menu = self.menuBar().addMenu("Template")
+        template_menu.addAction(self.new_template_action)
+        template_menu.addAction(self.save_template_action)
+        template_menu.addSeparator()
+        template_menu.addAction(self.import_template_action)
+        template_menu.addAction(self.export_template_action)
 
     def _create_keyboard_shortcuts(self) -> None:
         """Register page navigation and zoom shortcuts for the window."""
@@ -156,7 +175,10 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
 
-        if self.field_manager.fields:
+        if (
+            self.field_manager.fields
+            and self.template_controller.active_template is None
+        ):
             answer = QMessageBox.question(
                 self,
                 "Descartar campos?",
@@ -193,8 +215,9 @@ class MainWindow(QMainWindow):
         self._current_page_index = 0
         self._page_count = document_info.page_count
         self._zoom_percent = self.DEFAULT_ZOOM
-        self.field_manager.clear()
-        self._selected_field_id = None
+        if self.template_controller.active_template is None:
+            self.field_manager.clear()
+            self._selected_field_id = None
         self._clear_extraction_results()
         self._refresh_fields()
         LOGGER.info("PDF carregado: %s", document_info.file_name)
@@ -288,6 +311,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Nome inválido", str(error))
                 continue
             self._selected_field_id = field.id
+            self.template_controller.mark_changed()
             self._clear_extraction_results()
             self._refresh_fields()
             self._update_document_state()
@@ -326,8 +350,10 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Nome inválido", str(error))
                 continue
             self._selected_field_id = field_id
+            self.template_controller.mark_changed()
             self._clear_extraction_results()
             self._refresh_fields()
+            self._update_document_state()
             return
 
     def _request_delete_field(self, field_id: str) -> None:
@@ -345,6 +371,7 @@ class MainWindow(QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
         self.field_manager.delete(field_id)
+        self.template_controller.mark_changed()
         self._clear_extraction_results()
         remaining_fields = self.field_manager.fields
         self._selected_field_id = (
@@ -440,6 +467,27 @@ class MainWindow(QMainWindow):
         self.pdf_viewer.set_fields(fields, self._selected_field_id)
         self.field_panel.set_fields(fields, self._selected_field_id)
 
+    def _replace_fields(self, fields_object: object) -> None:
+        """Replace field state after a template workflow restores a mapping."""
+        if not isinstance(fields_object, tuple) or not all(
+            isinstance(field, ExtractionField) for field in fields_object
+        ):
+            return
+        fields = fields_object
+        self.field_manager.replace_all(fields)
+        self._selected_field_id = fields[0].id if fields else None
+        self._clear_extraction_results()
+        self.pdf_viewer.clear_draft_region()
+        self._refresh_fields()
+        first_field = fields[0] if fields else None
+        if (
+            first_field is not None
+            and self.pdf_service.document_info is not None
+            and first_field.page_index < self._page_count
+        ):
+            self._current_page_index = first_field.page_index
+            self._render_view(self._current_page_index, self._zoom_percent)
+
     def _update_document_state(self) -> None:
         """Synchronize controls and status text with page and zoom state."""
         self.pdf_viewer.update_controls(
@@ -452,11 +500,18 @@ class MainWindow(QMainWindow):
         document_info = self.pdf_service.document_info
         if document_info is not None:
             field_status = f" - {len(self.field_manager.fields)} campo(s)"
+            template_status = self._template_status()
             self.statusBar().showMessage(
                 f"{document_info.file_name} - "
                 f"Página {self._current_page_index + 1} de {self._page_count} - "
-                f"Zoom {self._zoom_percent}%{field_status}"
+                f"Zoom {self._zoom_percent}%{field_status}{template_status}"
             )
+        elif self.template_controller.active_template is not None:
+            self.statusBar().showMessage(self._template_status().removeprefix(" - "))
+
+    def _template_status(self) -> str:
+        """Return the active template fragment used by the status bar."""
+        return self.template_controller.status_fragment()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         """Log application shutdown and accept the close event."""

@@ -2,7 +2,7 @@
 
 Aplicação desktop open source para mapear visualmente regiões de documentos PDF e, nas próximas etapas, extrair seus dados para planilhas.
 
-> Status: Etapa 8 concluída. A aplicação exporta diretamente os valores extraídos para CSV e Excel; a etapa de revisão manual foi pulada.
+> Status: Etapa 9 concluída. A aplicação salva e carrega templates JSON reutilizáveis; a etapa de revisão manual foi pulada.
 
 ## Requisitos
 
@@ -47,7 +47,7 @@ python -m pdf_extractor.main
 pytest
 ```
 
-Os testes verificam PDF, campos, extração nativa e arquivos CSV/XLSX gerados.
+Os testes verificam PDF, campos, extração nativa, arquivos CSV/XLSX e templates JSON.
 
 ## Funcionalidades atuais
 
@@ -74,12 +74,19 @@ Os testes verificam PDF, campos, extração nativa e arquivos CSV/XLSX gerados.
 - exportação direta dos valores extraídos para CSV e XLSX;
 - uma linha por documento, com nome do arquivo e campos em ordem;
 - suporte a caracteres acentuados e campos vazios nos arquivos exportados;
+- criação de templates novos pelo menu `Template`;
+- salvamento, importação e exportação de templates em JSON;
+- schema de template versionado, com datas de criação e modificação em UTC;
+- validação de estrutura, tipos, campos duplicados e versão do schema;
+- restauração das regiões, nomes e ordem dos campos em outro PDF;
+- edição e salvamento de templates importados;
+- templates portáteis, sem armazenar o caminho do PDF de origem;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
 ## Roadmap imediato
 
-A Etapa 7 de revisão manual foi pulada. A próxima etapa adicionará templates reutilizáveis.
+A Etapa 7 de revisão manual foi pulada. A próxima etapa prevista é o processamento em lote; a etapa de tipos e validação de dados também foi removida do escopo por decisão do projeto.
 
 ## Licença
 
