@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
 
 from pdf_extractor.app.pdf_viewer import PdfViewer
 from pdf_extractor.core.pdf_service import PdfService, PdfServiceError
+from pdf_extractor.models.field_region import FieldRegion
 from pdf_extractor.utils.app_icon import load_application_icon
 
 LOGGER = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class MainWindow(QMainWindow):
         self._current_page_index = 0
         self._page_count = 0
         self._zoom_percent = self.DEFAULT_ZOOM
+        self._selected_region: FieldRegion | None = None
 
         self.setWindowTitle("Visual PDF Data Extractor")
         self.setWindowIcon(load_application_icon())
@@ -85,6 +87,8 @@ class MainWindow(QMainWindow):
         self.pdf_viewer.zoom_out_requested.connect(self._zoom_out)
         self.pdf_viewer.zoom_in_requested.connect(self._zoom_in)
         self.pdf_viewer.reset_zoom_requested.connect(self._reset_zoom)
+        self.pdf_viewer.region_selected.connect(self._handle_region_selected)
+        self.pdf_viewer.selection_clear_requested.connect(self._clear_selection)
 
     def _select_pdf(self) -> None:
         """Ask the user for a PDF and load its first page."""
@@ -107,7 +111,14 @@ class MainWindow(QMainWindow):
                 0,
                 self.DEFAULT_ZOOM / 100,
             )
-            self.pdf_viewer.show_page(document_info.file_name, page_image)
+            page_size = self.pdf_service.page_size(0)
+            self.pdf_viewer.show_page(
+                document_info.file_name,
+                page_image,
+                0,
+                page_size.width,
+                page_size.height,
+            )
         except (PdfServiceError, ValueError) as error:
             LOGGER.warning("Falha ao abrir PDF: %s", error)
             QMessageBox.critical(self, "Erro ao abrir PDF", str(error))
@@ -116,6 +127,8 @@ class MainWindow(QMainWindow):
         self._current_page_index = 0
         self._page_count = document_info.page_count
         self._zoom_percent = self.DEFAULT_ZOOM
+        self._selected_region = None
+        self.pdf_viewer.set_selected_region(None)
         LOGGER.info("PDF carregado: %s", document_info.file_name)
         self.setWindowTitle(f"{document_info.file_name} - Visual PDF Data Extractor")
         self._update_document_state()
@@ -170,12 +183,36 @@ class MainWindow(QMainWindow):
 
         try:
             page_image = self.pdf_service.render_page(page_index, zoom_percent / 100)
-            self.pdf_viewer.show_page(document_info.file_name, page_image)
+            page_size = self.pdf_service.page_size(page_index)
+            self.pdf_viewer.show_page(
+                document_info.file_name,
+                page_image,
+                page_index,
+                page_size.width,
+                page_size.height,
+            )
+            self.pdf_viewer.set_selected_region(self._selected_region)
         except (PdfServiceError, ValueError) as error:
             LOGGER.warning("Falha ao renderizar PDF: %s", error)
             QMessageBox.critical(self, "Erro ao renderizar página", str(error))
             return False
         return True
+
+    def _handle_region_selected(self, region: object) -> None:
+        """Store the single selected region, replacing any previous one."""
+        if not isinstance(region, FieldRegion):
+            return
+        self._selected_region = region
+        self.pdf_viewer.set_selected_region(region)
+        self._update_document_state()
+
+    def _clear_selection(self) -> None:
+        """Delete the current region and remove its visual overlay."""
+        if self._selected_region is None:
+            return
+        self._selected_region = None
+        self.pdf_viewer.set_selected_region(None)
+        self._update_document_state()
 
     def _update_document_state(self) -> None:
         """Synchronize controls and status text with page and zoom state."""
@@ -188,10 +225,15 @@ class MainWindow(QMainWindow):
         )
         document_info = self.pdf_service.document_info
         if document_info is not None:
+            selection_status = ""
+            if self._selected_region is not None:
+                selection_status = (
+                    f" - Seleção na página {self._selected_region.page_index + 1}"
+                )
             self.statusBar().showMessage(
                 f"{document_info.file_name} - "
                 f"Página {self._current_page_index + 1} de {self._page_count} - "
-                f"Zoom {self._zoom_percent}%"
+                f"Zoom {self._zoom_percent}%{selection_status}"
             )
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802

@@ -20,6 +20,14 @@ class PdfDocumentInfo:
     page_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class PdfPageSize:
+    """Represent the native dimensions of one PDF page in points."""
+
+    width: float
+    height: float
+
+
 class PdfService:
     """Manage one PDF document and render its pages with PyMuPDF."""
 
@@ -78,6 +86,21 @@ class PdfService:
             return pixmap.tobytes("png")
         except (OSError, RuntimeError, ValueError) as error:
             raise PdfServiceError("Não foi possível renderizar a página do PDF.") from error
+
+    def page_size(self, page_index: int = 0) -> PdfPageSize:
+        """Return a page's native width and height in PDF points."""
+        if self._document is None:
+            raise PdfServiceError("Nenhum documento PDF está carregado.")
+        if not 0 <= page_index < self._document.page_count:
+            raise PdfServiceError("A página solicitada não existe neste documento.")
+
+        try:
+            page_rect = self._document.load_page(page_index).rect
+            return PdfPageSize(float(page_rect.width), float(page_rect.height))
+        except (OSError, RuntimeError, ValueError) as error:
+            raise PdfServiceError(
+                "Não foi possível obter as dimensões da página do PDF."
+            ) from error
 
     def close(self) -> None:
         """Release the loaded document and its operating-system resources."""

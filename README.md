@@ -2,7 +2,7 @@
 
 Aplicação desktop open source para mapear visualmente regiões de documentos PDF e, nas próximas etapas, extrair seus dados para planilhas.
 
-> Status: Etapa 3 concluída. A aplicação abre documentos PDF, permite navegar pelas páginas e controlar o zoom.
+> Status: Etapa 4 concluída. A aplicação permite selecionar visualmente uma região retangular em coordenadas nativas do PDF.
 
 ## Requisitos
 
@@ -47,7 +47,7 @@ python -m pdf_extractor.main
 pytest
 ```
 
-Os testes verificam o serviço de PDF, o carregamento de documentos, a navegação entre páginas e os limites de zoom.
+Os testes verificam o serviço de PDF, navegação, zoom, conversão de coordenadas e seleção visual de regiões.
 
 ## Funcionalidades atuais
 
@@ -61,12 +61,15 @@ Os testes verificam o serviço de PDF, o carregamento de documentos, a navegaç�
 - zoom entre 50% e 300%, com redefinição para 100%;
 - atalhos `←` e `→` para navegar, `Ctrl++` e `Ctrl+-` para controlar o zoom;
 - ícone próprio na janela, no alternador de tarefas e na barra de tarefas;
+- seleção retangular com o mouse, preservada corretamente durante o zoom;
+- exclusão da seleção pelo botão `Limpar seleção` ou pela tecla `Delete`;
+- cancelamento de uma seleção em andamento com `Esc`;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
 ## Roadmap imediato
 
-A Etapa 4 adicionará a seleção visual de regiões retangulares nas páginas.
+A Etapa 5 permitirá transformar regiões em campos nomeados e gerenciá-los em um painel lateral.
 
 ## Licença
 

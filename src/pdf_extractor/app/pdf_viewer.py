@@ -14,6 +14,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from pdf_extractor.app.pdf_page_canvas import PdfPageCanvas
+from pdf_extractor.models.field_region import FieldRegion
+
 
 class PdfViewer(QWidget):
     """Display the current file name and one rendered PDF page."""
@@ -23,6 +26,8 @@ class PdfViewer(QWidget):
     zoom_out_requested = Signal()
     zoom_in_requested = Signal()
     reset_zoom_requested = Signal()
+    region_selected = Signal(object)
+    selection_clear_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -66,6 +71,17 @@ class PdfViewer(QWidget):
         self.reset_zoom_button.setToolTip("Restaurar zoom para 100%")
         self.reset_zoom_button.clicked.connect(self.reset_zoom_requested.emit)
 
+        selection_separator = QFrame()
+        selection_separator.setFrameShape(QFrame.Shape.VLine)
+        selection_separator.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.clear_selection_button = QPushButton("Limpar seleção")
+        self.clear_selection_button.setToolTip("Excluir a seleção atual (Delete)")
+        self.clear_selection_button.setEnabled(False)
+        self.clear_selection_button.clicked.connect(
+            self.selection_clear_requested.emit
+        )
+
         controls_layout = QHBoxLayout()
         controls_layout.setContentsMargins(8, 6, 8, 6)
         controls_layout.addWidget(self.file_name_label)
@@ -78,15 +94,19 @@ class PdfViewer(QWidget):
         controls_layout.addWidget(self.zoom_indicator)
         controls_layout.addWidget(self.zoom_in_button)
         controls_layout.addWidget(self.reset_zoom_button)
+        controls_layout.addWidget(selection_separator)
+        controls_layout.addWidget(self.clear_selection_button)
 
-        self.page_label = QLabel()
-        self.page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.page_label.setStyleSheet("background-color: #525659; color: #eeeeee;")
+        self.page_canvas = PdfPageCanvas()
+        self.page_canvas.region_selected.connect(self.region_selected.emit)
+        self.page_canvas.selection_clear_requested.connect(
+            self.selection_clear_requested.emit
+        )
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setWidget(self.page_label)
+        self.scroll_area.setWidget(self.page_canvas)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -99,15 +119,21 @@ class PdfViewer(QWidget):
     def show_empty_state(self) -> None:
         """Show instructions while no document is loaded."""
         self.file_name_label.clear()
-        self.page_label.clear()
-        self.page_label.setMinimumSize(0, 0)
-        self.page_label.setText(
+        self.page_canvas.clear_page(
             "Nenhum documento carregado.\n\n"
             "Use Arquivo > Abrir PDF para começar."
         )
+        self.set_selected_region(None)
         self.update_controls(0, 0, 100, 50, 300)
 
-    def show_page(self, file_name: str, png_data: bytes) -> None:
+    def show_page(
+        self,
+        file_name: str,
+        png_data: bytes,
+        page_index: int,
+        pdf_width: float,
+        pdf_height: float,
+    ) -> None:
         """Decode and show a rendered PNG page."""
         pixmap = QPixmap()
         if not pixmap.loadFromData(png_data, "PNG"):
@@ -120,10 +146,13 @@ class PdfViewer(QWidget):
         )
         self.file_name_label.setText(displayed_name)
         self.file_name_label.setToolTip(file_name)
-        self.page_label.clear()
-        self.page_label.setPixmap(pixmap)
-        self.page_label.setMinimumSize(pixmap.size())
+        self.page_canvas.set_page(pixmap, page_index, pdf_width, pdf_height)
         self._scroll_to_page_start()
+
+    def set_selected_region(self, region: FieldRegion | None) -> None:
+        """Display the selected region and synchronize its delete control."""
+        self.page_canvas.set_region(region)
+        self.clear_selection_button.setEnabled(region is not None)
 
     def update_controls(
         self,

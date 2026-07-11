@@ -51,6 +51,20 @@ def test_render_different_pages_and_scales(tmp_path: Path) -> None:
     service.close()
 
 
+def test_returns_native_page_size(tmp_path: Path) -> None:
+    """The service should expose native dimensions for coordinate mapping."""
+    pdf_path = tmp_path / "dimensoes.pdf"
+    create_synthetic_pdf(pdf_path)
+    service = PdfService()
+    service.open_document(pdf_path)
+
+    page_size = service.page_size(0)
+
+    assert page_size.width == pytest.approx(595, abs=1)
+    assert page_size.height == pytest.approx(842, abs=1)
+    service.close()
+
+
 def test_rejects_page_outside_document(tmp_path: Path) -> None:
     """Rendering should reject indexes outside the loaded document."""
     pdf_path = tmp_path / "documento.pdf"
