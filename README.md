@@ -2,7 +2,7 @@
 
 Aplicação desktop open source para mapear visualmente regiões de documentos PDF e, nas próximas etapas, extrair seus dados para planilhas.
 
-> Status: Etapa 5 concluída. A aplicação permite criar e gerenciar múltiplos campos nomeados sobre as páginas do PDF.
+> Status: Etapa 6 concluída. A aplicação extrai texto nativo das regiões mapeadas e apresenta resultados por campo.
 
 ## Requisitos
 
@@ -47,7 +47,7 @@ python -m pdf_extractor.main
 pytest
 ```
 
-Os testes verificam o serviço de PDF, navegação, zoom, coordenadas, campos nomeados e gerenciamento pelo painel lateral.
+Os testes verificam PDF, navegação, campos nomeados, coordenadas e extração nativa independente por região.
 
 ## Funcionalidades atuais
 
@@ -68,12 +68,15 @@ Os testes verificam o serviço de PDF, navegação, zoom, coordenadas, campos no
 - regiões preservadas corretamente durante navegação e zoom;
 - exclusão do campo selecionado pelo painel ou pela tecla `Delete`;
 - cancelamento de uma seleção em andamento com `Esc`;
+- extração de texto nativo das regiões com PyMuPDF;
+- tabela com campo, página, valor extraído e status;
+- estados `sucesso`, `vazio` e `erro`, sem interromper os demais campos;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
 ## Roadmap imediato
 
-A Etapa 6 adicionará a extração de texto nativo das regiões mapeadas.
+A próxima etapa adicionará revisão e edição manual dos valores extraídos.
 
 ## Licença
 

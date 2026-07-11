@@ -22,6 +22,7 @@ class FieldPanel(QWidget):
     field_selected = Signal(str)
     rename_requested = Signal(str)
     delete_requested = Signal(str)
+    extract_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -43,6 +44,10 @@ class FieldPanel(QWidget):
         self.delete_button.setEnabled(False)
         self.delete_button.clicked.connect(self._emit_delete)
 
+        self.extract_button = QPushButton("Extrair dados")
+        self.extract_button.setEnabled(False)
+        self.extract_button.clicked.connect(self.extract_requested.emit)
+
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.rename_button)
         button_layout.addWidget(self.delete_button)
@@ -52,6 +57,7 @@ class FieldPanel(QWidget):
         layout.addWidget(self.title_label)
         layout.addWidget(self.field_list, 1)
         layout.addLayout(button_layout)
+        layout.addWidget(self.extract_button)
 
     def set_fields(
         self,
@@ -75,6 +81,7 @@ class FieldPanel(QWidget):
         has_selection = selected_item is not None
         self.rename_button.setEnabled(has_selection)
         self.delete_button.setEnabled(has_selection)
+        self.extract_button.setEnabled(bool(fields))
 
     def _current_field_id(self) -> str | None:
         item = self.field_list.currentItem()

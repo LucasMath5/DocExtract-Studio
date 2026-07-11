@@ -16,11 +16,14 @@ from PySide6.QtWidgets import (
 )
 
 from pdf_extractor.app.field_panel import FieldPanel
+from pdf_extractor.app.extraction_result_table import ExtractionResultTable
 from pdf_extractor.app.pdf_viewer import PdfViewer
+from pdf_extractor.core.extraction_service import ExtractionService
 from pdf_extractor.core.field_manager import FieldManager, FieldValidationError
 from pdf_extractor.core.pdf_service import PdfService, PdfServiceError
 from pdf_extractor.models.extraction_field import ExtractionField
 from pdf_extractor.models.field_region import FieldRegion
+from pdf_extractor.models.extraction_result import ExtractionStatus
 from pdf_extractor.utils.app_icon import load_application_icon
 
 LOGGER = logging.getLogger(__name__)
@@ -37,9 +40,11 @@ class MainWindow(QMainWindow):
     def __init__(self, pdf_service: PdfService | None = None) -> None:
         super().__init__()
         self.pdf_service = pdf_service or PdfService()
+        self.extraction_service = ExtractionService(self.pdf_service)
         self.field_manager = FieldManager()
         self.pdf_viewer = PdfViewer()
         self.field_panel = FieldPanel()
+        self.result_table = ExtractionResultTable()
         self._current_page_index = 0
         self._page_count = 0
         self._zoom_percent = self.DEFAULT_ZOOM
@@ -47,7 +52,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Visual PDF Data Extractor")
         self.setWindowIcon(load_application_icon())
-        self.resize(1000, 700)
+        self.resize(1100, 800)
 
         self._create_actions()
         self._create_menu()
@@ -107,16 +112,24 @@ class MainWindow(QMainWindow):
         self.field_panel.field_selected.connect(self._select_field)
         self.field_panel.rename_requested.connect(self._rename_field)
         self.field_panel.delete_requested.connect(self._request_delete_field)
+        self.field_panel.extract_requested.connect(self._extract_data)
 
     def _create_central_area(self) -> None:
         """Place the PDF viewer and field panel in a resizable splitter."""
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.pdf_viewer)
-        splitter.addWidget(self.field_panel)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 0)
-        splitter.setSizes([760, 240])
-        self.setCentralWidget(splitter)
+        top_splitter = QSplitter(Qt.Orientation.Horizontal)
+        top_splitter.addWidget(self.pdf_viewer)
+        top_splitter.addWidget(self.field_panel)
+        top_splitter.setStretchFactor(0, 1)
+        top_splitter.setStretchFactor(1, 0)
+        top_splitter.setSizes([820, 260])
+
+        main_splitter = QSplitter(Qt.Orientation.Vertical)
+        main_splitter.addWidget(top_splitter)
+        main_splitter.addWidget(self.result_table)
+        main_splitter.setStretchFactor(0, 3)
+        main_splitter.setStretchFactor(1, 1)
+        main_splitter.setSizes([590, 190])
+        self.setCentralWidget(main_splitter)
 
     def _select_pdf(self) -> None:
         """Ask the user for a PDF and load its first page."""
@@ -168,6 +181,7 @@ class MainWindow(QMainWindow):
         self._zoom_percent = self.DEFAULT_ZOOM
         self.field_manager.clear()
         self._selected_field_id = None
+        self.result_table.clear_results()
         self._refresh_fields()
         LOGGER.info("PDF carregado: %s", document_info.file_name)
         self.setWindowTitle(f"{document_info.file_name} - Visual PDF Data Extractor")
@@ -260,6 +274,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Nome inválido", str(error))
                 continue
             self._selected_field_id = field.id
+            self.result_table.clear_results()
             self._refresh_fields()
             self._update_document_state()
             return
@@ -297,6 +312,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Nome inválido", str(error))
                 continue
             self._selected_field_id = field_id
+            self.result_table.clear_results()
             self._refresh_fields()
             return
 
@@ -315,12 +331,32 @@ class MainWindow(QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
         self.field_manager.delete(field_id)
+        self.result_table.clear_results()
         remaining_fields = self.field_manager.fields
         self._selected_field_id = (
             remaining_fields[0].id if remaining_fields else None
         )
         self._refresh_fields()
         self._update_document_state()
+
+    def _extract_data(self) -> None:
+        """Extract native text for all fields and display independent results."""
+        fields = self.field_manager.fields
+        if not fields:
+            return
+        results = self.extraction_service.extract(fields)
+        self.result_table.set_results(results)
+        success_count = sum(
+            result.status == ExtractionStatus.SUCCESS for result in results
+        )
+        empty_count = sum(
+            result.status == ExtractionStatus.EMPTY for result in results
+        )
+        error_count = sum(result.status == ExtractionStatus.ERROR for result in results)
+        self.statusBar().showMessage(
+            f"Extração concluída - {success_count} sucesso(s), "
+            f"{empty_count} vazio(s), {error_count} erro(s)"
+        )
 
     def _refresh_fields(self) -> None:
         """Synchronize the canvas and side panel with the field manager."""

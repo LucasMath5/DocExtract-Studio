@@ -487,6 +487,38 @@ def test_delete_field_requires_confirmation(
     window.close()
 
 
+def test_extract_button_populates_result_table(
+    application: QApplication,
+    tmp_path: Path,
+) -> None:
+    """The field panel should run extraction and populate read-only rows."""
+    pdf_path = tmp_path / "resultado_interface.pdf"
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 100), "Empresa Exemplo", fontsize=12)
+    document.save(pdf_path)
+    document.close()
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    field = window.field_manager.create(
+        "Cliente",
+        FieldRegion(0, 65, 82, 180, 25),
+    )
+    window._selected_field_id = field.id
+    window._refresh_fields()
+
+    assert window.field_panel.extract_button.isEnabled()
+    window.field_panel.extract_button.click()
+
+    assert window.result_table.table.rowCount() == 1
+    assert window.result_table.table.item(0, 0).text() == "Cliente"
+    assert window.result_table.table.item(0, 1).text() == "1"
+    assert window.result_table.table.item(0, 2).text() == "Empresa Exemplo"
+    assert window.result_table.table.item(0, 3).text() == "sucesso"
+    assert "1 sucesso" in window.statusBar().currentMessage()
+    window.close()
+
+
 def test_invalid_pdf_shows_friendly_error(
     application: QApplication,
     monkeypatch: pytest.MonkeyPatch,

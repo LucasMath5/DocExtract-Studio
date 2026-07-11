@@ -8,6 +8,7 @@ import fitz
 import pytest
 
 from pdf_extractor.core.pdf_service import PdfService, PdfServiceError
+from pdf_extractor.models.field_region import FieldRegion
 
 
 def create_synthetic_pdf(path: Path, page_count: int = 1) -> None:
@@ -62,6 +63,24 @@ def test_returns_native_page_size(tmp_path: Path) -> None:
 
     assert page_size.width == pytest.approx(595, abs=1)
     assert page_size.height == pytest.approx(842, abs=1)
+    service.close()
+
+
+def test_extracts_text_from_native_region(tmp_path: Path) -> None:
+    """The PDF service should clip native text to the requested region."""
+    pdf_path = tmp_path / "texto_regiao.pdf"
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 100), "Dentro", fontsize=12)
+    page.insert_text((300, 100), "Fora", fontsize=12)
+    document.save(pdf_path)
+    document.close()
+    service = PdfService()
+    service.open_document(pdf_path)
+
+    value = service.extract_region_text(FieldRegion(0, 65, 82, 120, 25))
+
+    assert value.strip() == "Dentro"
     service.close()
 
 

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import fitz
 
+from pdf_extractor.models.field_region import FieldRegion
+
 
 class PdfServiceError(Exception):
     """Represent an expected error while loading or rendering a PDF."""
@@ -52,7 +54,8 @@ class PdfService:
             new_document = fitz.open(str(path))
         except (OSError, RuntimeError, ValueError) as error:
             raise PdfServiceError(
-                "Não foi possível abrir o PDF. O arquivo pode estar inválido ou corrompido."
+                "Não foi possível abrir o PDF. "
+                "O arquivo pode estar inválido ou corrompido."
             ) from error
 
         if new_document.page_count < 1:
@@ -85,7 +88,9 @@ class PdfService:
             )
             return pixmap.tobytes("png")
         except (OSError, RuntimeError, ValueError) as error:
-            raise PdfServiceError("Não foi possível renderizar a página do PDF.") from error
+            raise PdfServiceError(
+                "Não foi possível renderizar a página do PDF."
+            ) from error
 
     def page_size(self, page_index: int = 0) -> PdfPageSize:
         """Return a page's native width and height in PDF points."""
@@ -100,6 +105,27 @@ class PdfService:
         except (OSError, RuntimeError, ValueError) as error:
             raise PdfServiceError(
                 "Não foi possível obter as dimensões da página do PDF."
+            ) from error
+
+    def extract_region_text(self, region: FieldRegion) -> str:
+        """Extract native text clipped to one region in PDF coordinates."""
+        if self._document is None:
+            raise PdfServiceError("Nenhum documento PDF está carregado.")
+        if not 0 <= region.page_index < self._document.page_count:
+            raise PdfServiceError("A página do campo não existe neste documento.")
+
+        try:
+            page = self._document.load_page(region.page_index)
+            clip = fitz.Rect(region.x, region.y, region.right, region.bottom)
+            clipped_region = clip & page.rect
+            if clipped_region.is_empty:
+                raise PdfServiceError("A região do campo está fora da página.")
+            return page.get_text("text", clip=clipped_region)
+        except PdfServiceError:
+            raise
+        except (OSError, RuntimeError, ValueError) as error:
+            raise PdfServiceError(
+                "Não foi possível extrair o texto da região."
             ) from error
 
     def close(self) -> None:
