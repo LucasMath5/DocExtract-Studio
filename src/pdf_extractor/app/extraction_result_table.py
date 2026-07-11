@@ -50,9 +50,9 @@ class ExtractionResultTable(QWidget):
         title_layout.addWidget(self.export_csv_button)
         title_layout.addWidget(self.export_excel_button)
 
-        self.table = QTableWidget(0, 4)
+        self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(
-            ["Campo", "Página", "Valor extraído", "Status"]
+            ["Campo", "Página", "Valor extraído", "Método", "Status"]
         )
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -62,6 +62,7 @@ class ExtractionResultTable(QWidget):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 6, 8, 8)
@@ -76,12 +77,13 @@ class ExtractionResultTable(QWidget):
                 QTableWidgetItem(result.field_name),
                 QTableWidgetItem(str(result.page_index + 1)),
                 QTableWidgetItem(result.value),
+                QTableWidgetItem(result.method.value if result.method else "-"),
                 QTableWidgetItem(result.status.value),
             )
             for column, item in enumerate(items):
                 item.setData(Qt.ItemDataRole.UserRole, result.field_id)
                 self.table.setItem(row, column, item)
-            status_item = items[3]
+            status_item = items[4]
             status_item.setForeground(self.STATUS_COLORS[result.status])
             if result.error_message:
                 status_item.setToolTip(result.error_message)

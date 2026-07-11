@@ -15,6 +15,8 @@ from pdf_extractor.models.batch_result import (
 )
 from pdf_extractor.models.extraction_result import ExtractionStatus
 from pdf_extractor.models.extraction_template import ExtractionTemplate
+from pdf_extractor.ocr.base import OcrEngine
+from pdf_extractor.ocr.tesseract_service import TesseractService
 
 
 LOGGER = logging.getLogger(__name__)
@@ -30,8 +32,10 @@ class BatchService:
     def __init__(
         self,
         pdf_service_factory: Callable[[], PdfService] = PdfService,
+        ocr_engine: OcrEngine | None = None,
     ) -> None:
         self._pdf_service_factory = pdf_service_factory
+        self._ocr_engine = ocr_engine or TesseractService()
 
     def process(
         self,
@@ -74,7 +78,10 @@ class BatchService:
         pdf_service = self._pdf_service_factory()
         try:
             pdf_service.open_document(file_path)
-            field_results = ExtractionService(pdf_service).extract(template.fields)
+            field_results = ExtractionService(
+                pdf_service,
+                self._ocr_engine,
+            ).extract(template.fields)
         except PdfServiceError as error:
             return BatchDocumentResult(
                 file_path=file_path,

@@ -36,6 +36,14 @@ class BatchDocumentResult:
         """Count fields whose native extraction returned no text."""
         return sum(not result.value for result in self.results)
 
+    @property
+    def method_summary(self) -> str:
+        """Return the distinct extraction methods used by this document."""
+        methods = dict.fromkeys(
+            result.method.value for result in self.results if result.method is not None
+        )
+        return ", ".join(methods)
+
 
 @dataclass(frozen=True, slots=True)
 class BatchReport:

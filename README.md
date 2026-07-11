@@ -2,12 +2,13 @@
 
 Aplicação desktop open source para mapear visualmente regiões de documentos PDF e, nas próximas etapas, extrair seus dados para planilhas.
 
-> Status: Etapa 11 concluída. A aplicação aplica templates a vários PDFs em lote, com progresso, cancelamento, relatório e exportação consolidada. As etapas de revisão manual e validação de dados foram puladas.
+> Status: Etapa 13 concluída. A aplicação usa OCR regional como fallback quando uma área do PDF não possui texto nativo. As etapas de revisão manual, validação de dados e suporte a ZIP foram puladas.
 
 ## Requisitos
 
 - Python 3.11 ou superior
 - Windows, Linux ou macOS com suporte ao PySide6
+- Tesseract OCR para processar PDFs digitalizados
 
 ## Instalação
 
@@ -26,6 +27,24 @@ Instale o projeto em modo editável:
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
+
+### Tesseract OCR
+
+Instale o Tesseract separadamente seguindo a [documentação oficial](https://github.com/tesseract-ocr/tessdoc/blob/main/Installation.md). No Windows, a aplicação procura automaticamente o executável em `Program Files` e no `PATH`.
+
+Para indicar outra instalação:
+
+```powershell
+$env:TESSERACT_CMD = "D:\Ferramentas\Tesseract-OCR\tesseract.exe"
+```
+
+O idioma padrão é `por+eng`. Para alterar:
+
+```powershell
+$env:PDF_EXTRACTOR_OCR_LANG = "por"
+```
+
+Os arquivos de idioma correspondentes precisam estar instalados na pasta `tessdata` do Tesseract.
 
 ## Execução
 
@@ -47,7 +66,7 @@ python -m pdf_extractor.main
 pytest
 ```
 
-Os testes verificam PDF, campos, extração nativa, arquivos CSV/XLSX, templates JSON e processamento em lote.
+Os testes verificam PDF, campos, extração nativa, OCR regional, arquivos CSV/XLSX, templates JSON e processamento em lote.
 
 ## Funcionalidades atuais
 
@@ -91,12 +110,19 @@ Os testes verificam PDF, campos, extração nativa, arquivos CSV/XLSX, templates
 - detalhe do erro associado a cada arquivo;
 - prévia da tabela consolidada antes de salvar, com uma coluna por campo;
 - exportação consolidada do lote para CSV ou Excel;
+- detecção de regiões sem texto nativo;
+- renderização em alta resolução somente da região necessária para OCR;
+- fallback com Tesseract para PDFs digitalizados;
+- idiomas de OCR configuráveis, com padrão `por+eng`;
+- indicação de `texto nativo` ou `OCR` nos resultados;
+- indicação dos métodos usados na prévia e exportação do lote;
+- erro amigável por campo quando o Tesseract ou o idioma não está disponível;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
 ## Roadmap imediato
 
-As etapas 7 e 10, de revisão manual e validação de dados, foram puladas. A Etapa 12 de suporte a ZIP também está fora do escopo. A próxima etapa prevista é o fallback de OCR para PDFs digitalizados.
+As etapas 7 e 10, de revisão manual e validação de dados, foram puladas. A Etapa 12 de suporte a ZIP também está fora do escopo. A próxima etapa prevista é o histórico local de execuções.
 
 ## Licença
 

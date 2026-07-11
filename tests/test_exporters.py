@@ -15,7 +15,11 @@ from pdf_extractor.exporters.base import (
 from pdf_extractor.exporters.csv_exporter import CsvExporter
 from pdf_extractor.exporters.excel_exporter import ExcelExporter
 from pdf_extractor.models.extraction_field import ExtractionField
-from pdf_extractor.models.extraction_result import ExtractionResult, ExtractionStatus
+from pdf_extractor.models.extraction_result import (
+    ExtractionMethod,
+    ExtractionResult,
+    ExtractionStatus,
+)
 from pdf_extractor.models.field_region import FieldRegion
 from pdf_extractor.models.batch_result import (
     BatchDocumentResult,
@@ -95,6 +99,7 @@ def test_batch_exporters_write_one_consolidated_row_per_document(
         0,
         "Empresa Exemplo",
         ExtractionStatus.SUCCESS,
+        method=ExtractionMethod.NATIVE_TEXT,
     )
     documents = (
         BatchDocumentResult(
@@ -118,16 +123,22 @@ def test_batch_exporters_write_one_consolidated_row_per_document(
 
     with csv_path.open(encoding="utf-8-sig", newline="") as stream:
         assert list(csv.reader(stream)) == [
-            ["arquivo", "status", "erro", "Cliente"],
-            ["sucesso.pdf", "sucesso", "", "Empresa Exemplo"],
-            ["falha.pdf", "falha", "PDF inválido", ""],
+            ["arquivo", "status", "método", "erro", "Cliente"],
+            [
+                "sucesso.pdf",
+                "sucesso",
+                "texto nativo",
+                "",
+                "Empresa Exemplo",
+            ],
+            ["falha.pdf", "falha", "", "PDF inválido", ""],
         ]
     workbook = load_workbook(excel_path)
     worksheet = workbook["Dados extraídos"]
     assert list(worksheet.values) == [
-        ("arquivo", "status", "erro", "Cliente"),
-        ("sucesso.pdf", "sucesso", None, "Empresa Exemplo"),
-        ("falha.pdf", "falha", "PDF inválido", None),
+        ("arquivo", "status", "método", "erro", "Cliente"),
+        ("sucesso.pdf", "sucesso", "texto nativo", None, "Empresa Exemplo"),
+        ("falha.pdf", "falha", None, "PDF inválido", None),
     ]
-    assert worksheet.auto_filter.ref == "A1:D3"
+    assert worksheet.auto_filter.ref == "A1:E3"
     workbook.close()

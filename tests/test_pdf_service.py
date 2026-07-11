@@ -84,6 +84,21 @@ def test_extracts_text_from_native_region(tmp_path: Path) -> None:
     service.close()
 
 
+def test_renders_only_selected_region_for_ocr(tmp_path: Path) -> None:
+    """Regional rendering should preserve the PDF rectangle at OCR scale."""
+    pdf_path = tmp_path / "regiao_ocr.pdf"
+    create_synthetic_pdf(pdf_path)
+    service = PdfService()
+    service.open_document(pdf_path)
+    region = FieldRegion(0, 50, 60, 120, 40)
+
+    image = fitz.Pixmap(service.render_region(region, scale=4.0))
+
+    assert image.width == pytest.approx(480, abs=1)
+    assert image.height == pytest.approx(160, abs=1)
+    service.close()
+
+
 def test_rejects_page_outside_document(tmp_path: Path) -> None:
     """Rendering should reject indexes outside the loaded document."""
     pdf_path = tmp_path / "documento.pdf"

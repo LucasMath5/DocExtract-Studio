@@ -17,6 +17,13 @@ from pdf_extractor.models.extraction_template import ExtractionTemplate
 from pdf_extractor.models.field_region import FieldRegion
 
 
+class EmptyOcrEngine:
+    """Return no OCR text so empty-region classification stays deterministic."""
+
+    def recognize(self, image_bytes: bytes) -> str:
+        return ""
+
+
 def create_pdf(path: Path, text: str | None = None) -> None:
     """Create a generic one-page PDF, optionally with native text."""
     document = fitz.open()
@@ -58,7 +65,7 @@ def test_batch_processes_success_empty_and_invalid_pdf_independently(
     create_pdf(last_pdf, "Outro Exemplo")
     progress: list[tuple[int, str]] = []
 
-    report = BatchService().process(
+    report = BatchService(ocr_engine=EmptyOcrEngine()).process(
         (success_pdf, empty_pdf, invalid_pdf, last_pdf),
         sample_template(),
         progress_callback=lambda current, total, result: progress.append(
@@ -73,7 +80,9 @@ def test_batch_processes_success_empty_and_invalid_pdf_independently(
     assert report.failure_count == 1
     assert not report.cancelled
     assert report.documents[0].results[0].value == "Empresa Exemplo"
+    assert report.documents[0].method_summary == "texto nativo"
     assert report.documents[1].status == BatchDocumentStatus.REVIEW_NEEDED
+    assert report.documents[1].method_summary == "OCR"
     assert report.documents[2].error_message
     assert progress[-1] == (4, last_pdf.name)
 
@@ -85,7 +94,7 @@ def test_batch_cancellation_stops_before_next_document(tmp_path: Path) -> None:
         create_pdf(path, f"Documento {index}")
     cancellation = Event()
 
-    report = BatchService().process(
+    report = BatchService(ocr_engine=EmptyOcrEngine()).process(
         paths,
         sample_template(),
         progress_callback=lambda *args: cancellation.set(),

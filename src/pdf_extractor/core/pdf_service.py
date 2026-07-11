@@ -128,6 +128,40 @@ class PdfService:
                 "Não foi possível extrair o texto da região."
             ) from error
 
+    def render_region(self, region: FieldRegion, scale: float = 4.0) -> bytes:
+        """Render only one PDF region as a high-resolution PNG for OCR."""
+        if self._document is None:
+            raise PdfServiceError("Nenhum documento PDF está carregado.")
+        if not 0 <= region.page_index < self._document.page_count:
+            raise PdfServiceError("A página do campo não existe neste documento.")
+        if scale <= 0:
+            raise PdfServiceError("A escala de renderização deve ser maior que zero.")
+
+        try:
+            page = self._document.load_page(region.page_index)
+            region_rect = fitz.Rect(
+                region.x,
+                region.y,
+                region.right,
+                region.bottom,
+            )
+            clip = region_rect & page.rect
+            if clip.is_empty:
+                raise PdfServiceError("A região do campo está fora da página.")
+            pixmap = page.get_pixmap(
+                matrix=fitz.Matrix(scale, scale),
+                clip=clip,
+                colorspace=fitz.csRGB,
+                alpha=False,
+            )
+            return pixmap.tobytes("png")
+        except PdfServiceError:
+            raise
+        except (OSError, RuntimeError, ValueError) as error:
+            raise PdfServiceError(
+                "Não foi possível renderizar a região para OCR."
+            ) from error
+
     def close(self) -> None:
         """Release the loaded document and its operating-system resources."""
         if self._document is not None:

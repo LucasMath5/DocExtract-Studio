@@ -32,7 +32,11 @@ from pdf_extractor.exporters.csv_exporter import CsvExporter
 from pdf_extractor.exporters.excel_exporter import ExcelExporter
 from pdf_extractor.models.extraction_field import ExtractionField
 from pdf_extractor.models.field_region import FieldRegion
-from pdf_extractor.models.extraction_result import ExtractionResult, ExtractionStatus
+from pdf_extractor.models.extraction_result import (
+    ExtractionMethod,
+    ExtractionResult,
+    ExtractionStatus,
+)
 from pdf_extractor.utils.app_icon import load_application_icon
 
 LOGGER = logging.getLogger(__name__)
@@ -404,9 +408,11 @@ class MainWindow(QMainWindow):
             result.status == ExtractionStatus.EMPTY for result in results
         )
         error_count = sum(result.status == ExtractionStatus.ERROR for result in results)
+        ocr_count = sum(result.method == ExtractionMethod.OCR for result in results)
         self.statusBar().showMessage(
             f"Extração concluída - {success_count} sucesso(s), "
-            f"{empty_count} vazio(s), {error_count} erro(s)"
+            f"{empty_count} vazio(s), {error_count} erro(s), "
+            f"{ocr_count} campo(s) via OCR"
         )
 
     def _clear_extraction_results(self) -> None:

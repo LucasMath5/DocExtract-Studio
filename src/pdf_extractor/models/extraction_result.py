@@ -14,6 +14,13 @@ class ExtractionStatus(StrEnum):
     ERROR = "erro"
 
 
+class ExtractionMethod(StrEnum):
+    """Identify whether text came from the PDF layer or image OCR."""
+
+    NATIVE_TEXT = "texto nativo"
+    OCR = "OCR"
+
+
 @dataclass(frozen=True, slots=True)
 class ExtractionResult:
     """Store the extracted value and status for one mapped field."""
@@ -24,3 +31,4 @@ class ExtractionResult:
     value: str
     status: ExtractionStatus
     error_message: str | None = None
+    method: ExtractionMethod | None = None

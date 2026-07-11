@@ -522,7 +522,8 @@ def test_extract_button_populates_result_table(
     assert window.result_table.table.item(0, 0).text() == "Cliente"
     assert window.result_table.table.item(0, 1).text() == "1"
     assert window.result_table.table.item(0, 2).text() == "Empresa Exemplo"
-    assert window.result_table.table.item(0, 3).text() == "sucesso"
+    assert window.result_table.table.item(0, 3).text() == "texto nativo"
+    assert window.result_table.table.item(0, 4).text() == "sucesso"
     assert "1 sucesso" in window.statusBar().currentMessage()
     assert window.result_table.export_csv_button.isEnabled()
     assert window.result_table.export_excel_button.isEnabled()
@@ -717,7 +718,11 @@ def test_batch_action_processes_multiple_pdfs_in_worker_thread(
     page.insert_text((72, 100), "Empresa Exemplo", fontsize=12)
     document.save(first_pdf)
     document.close()
-    create_synthetic_pdf(second_pdf)
+    second_document = fitz.open()
+    second_page = second_document.new_page()
+    second_page.insert_text((72, 100), "Outra Empresa", fontsize=12)
+    second_document.save(second_pdf)
+    second_document.close()
     template_path = tmp_path / "lote_template.json"
     template_service = TemplateService()
     template = template_service.create(
@@ -758,20 +763,22 @@ def test_batch_action_processes_multiple_pdfs_in_worker_thread(
     assert reports
     report = reports[0]
     assert report.processed == 2
-    assert report.success_count == 1
-    assert report.review_count == 1
+    assert report.success_count == 2
+    assert report.review_count == 0
     assert window.batch_controller.result_dialog is not None
     preview = window.batch_controller.result_dialog.table
     assert preview.rowCount() == 2
-    assert preview.columnCount() == 4
+    assert preview.columnCount() == 5
     assert [
         preview.horizontalHeaderItem(column).text()
         for column in range(preview.columnCount())
-    ] == ["arquivo", "status", "erro", "Cliente"]
+    ] == ["arquivo", "status", "método", "erro", "Cliente"]
     assert preview.item(0, 0).text() == first_pdf.name
-    assert preview.item(0, 3).text() == "Empresa Exemplo"
-    assert preview.item(1, 1).text() == "revisão necessária"
-    assert preview.item(1, 3).text() == ""
+    assert preview.item(0, 2).text() == "texto nativo"
+    assert preview.item(0, 4).text() == "Empresa Exemplo"
+    assert preview.item(1, 1).text() == "sucesso"
+    assert preview.item(1, 2).text() == "texto nativo"
+    assert preview.item(1, 4).text() == "Outra Empresa"
     while window.batch_controller.is_running and timer.elapsed() < 5_000:
         application.processEvents()
         QTest.qWait(10)

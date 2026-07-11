@@ -67,6 +67,7 @@ def build_batch_export_dataset(
             (
                 document.file_name,
                 document.status.value,
+                document.method_summary,
                 document.error_message or "",
                 *(values_by_field.get(field.id, "") for field in fields),
             )
@@ -75,6 +76,7 @@ def build_batch_export_dataset(
         headers=(
             "arquivo",
             "status",
+            "método",
             "erro",
             *(field.name for field in fields),
         ),
