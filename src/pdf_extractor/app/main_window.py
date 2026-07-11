@@ -21,9 +21,16 @@ from pdf_extractor.app.pdf_viewer import PdfViewer
 from pdf_extractor.core.extraction_service import ExtractionService
 from pdf_extractor.core.field_manager import FieldManager, FieldValidationError
 from pdf_extractor.core.pdf_service import PdfService, PdfServiceError
+from pdf_extractor.exporters.base import (
+    ExportError,
+    TabularExporter,
+    build_export_dataset,
+)
+from pdf_extractor.exporters.csv_exporter import CsvExporter
+from pdf_extractor.exporters.excel_exporter import ExcelExporter
 from pdf_extractor.models.extraction_field import ExtractionField
 from pdf_extractor.models.field_region import FieldRegion
-from pdf_extractor.models.extraction_result import ExtractionStatus
+from pdf_extractor.models.extraction_result import ExtractionResult, ExtractionStatus
 from pdf_extractor.utils.app_icon import load_application_icon
 
 LOGGER = logging.getLogger(__name__)
@@ -49,6 +56,7 @@ class MainWindow(QMainWindow):
         self._page_count = 0
         self._zoom_percent = self.DEFAULT_ZOOM
         self._selected_field_id: str | None = None
+        self._extraction_results: tuple[ExtractionResult, ...] = ()
 
         self.setWindowTitle("Visual PDF Data Extractor")
         self.setWindowIcon(load_application_icon())
@@ -59,6 +67,7 @@ class MainWindow(QMainWindow):
         self._create_keyboard_shortcuts()
         self._connect_viewer_controls()
         self._connect_field_panel()
+        self._connect_result_table()
         self._create_central_area()
         self.statusBar().showMessage("Pronto")
 
@@ -113,6 +122,11 @@ class MainWindow(QMainWindow):
         self.field_panel.rename_requested.connect(self._rename_field)
         self.field_panel.delete_requested.connect(self._request_delete_field)
         self.field_panel.extract_requested.connect(self._extract_data)
+
+    def _connect_result_table(self) -> None:
+        """Connect CSV and Excel export requests from the result area."""
+        self.result_table.export_csv_requested.connect(self._export_csv)
+        self.result_table.export_excel_requested.connect(self._export_excel)
 
     def _create_central_area(self) -> None:
         """Place the PDF viewer and field panel in a resizable splitter."""
@@ -181,7 +195,7 @@ class MainWindow(QMainWindow):
         self._zoom_percent = self.DEFAULT_ZOOM
         self.field_manager.clear()
         self._selected_field_id = None
-        self.result_table.clear_results()
+        self._clear_extraction_results()
         self._refresh_fields()
         LOGGER.info("PDF carregado: %s", document_info.file_name)
         self.setWindowTitle(f"{document_info.file_name} - Visual PDF Data Extractor")
@@ -274,7 +288,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Nome inválido", str(error))
                 continue
             self._selected_field_id = field.id
-            self.result_table.clear_results()
+            self._clear_extraction_results()
             self._refresh_fields()
             self._update_document_state()
             return
@@ -312,7 +326,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Nome inválido", str(error))
                 continue
             self._selected_field_id = field_id
-            self.result_table.clear_results()
+            self._clear_extraction_results()
             self._refresh_fields()
             return
 
@@ -331,7 +345,7 @@ class MainWindow(QMainWindow):
         if answer != QMessageBox.StandardButton.Yes:
             return
         self.field_manager.delete(field_id)
-        self.result_table.clear_results()
+        self._clear_extraction_results()
         remaining_fields = self.field_manager.fields
         self._selected_field_id = (
             remaining_fields[0].id if remaining_fields else None
@@ -345,6 +359,7 @@ class MainWindow(QMainWindow):
         if not fields:
             return
         results = self.extraction_service.extract(fields)
+        self._extraction_results = results
         self.result_table.set_results(results)
         success_count = sum(
             result.status == ExtractionStatus.SUCCESS for result in results
@@ -356,6 +371,67 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Extração concluída - {success_count} sucesso(s), "
             f"{empty_count} vazio(s), {error_count} erro(s)"
+        )
+
+    def _clear_extraction_results(self) -> None:
+        """Remove stale extraction values and disable export actions."""
+        self._extraction_results = ()
+        self.result_table.clear_results()
+
+    def _export_csv(self) -> None:
+        """Ask for a CSV destination and export the latest extracted values."""
+        self._export_results(
+            CsvExporter(),
+            "Exportar CSV",
+            "Arquivos CSV (*.csv)",
+            ".csv",
+        )
+
+    def _export_excel(self) -> None:
+        """Ask for an XLSX destination and export the latest extracted values."""
+        self._export_results(
+            ExcelExporter(),
+            "Exportar Excel",
+            "Planilhas Excel (*.xlsx)",
+            ".xlsx",
+        )
+
+    def _export_results(
+        self,
+        exporter: TabularExporter,
+        dialog_title: str,
+        file_filter: str,
+        suffix: str,
+    ) -> None:
+        """Export one document row with columns ordered like the field panel."""
+        document_info = self.pdf_service.document_info
+        if document_info is None or not self._extraction_results:
+            return
+        selected_path, _ = QFileDialog.getSaveFileName(
+            self,
+            dialog_title,
+            "",
+            file_filter,
+        )
+        if not selected_path:
+            return
+        file_path = Path(selected_path)
+        if file_path.suffix.lower() != suffix:
+            file_path = file_path.with_suffix(suffix)
+        dataset = build_export_dataset(
+            document_info.file_name,
+            self.field_manager.fields,
+            self._extraction_results,
+        )
+        try:
+            exporter.export(file_path, dataset)
+        except ExportError as error:
+            QMessageBox.critical(self, "Falha na exportação", str(error))
+            return
+        QMessageBox.information(
+            self,
+            "Exportação concluída",
+            f"Arquivo salvo em:\n{file_path}",
         )
 
     def _refresh_fields(self) -> None:

@@ -2,7 +2,7 @@
 
 Aplicação desktop open source para mapear visualmente regiões de documentos PDF e, nas próximas etapas, extrair seus dados para planilhas.
 
-> Status: Etapa 6 concluída. A aplicação extrai texto nativo das regiões mapeadas e apresenta resultados por campo.
+> Status: Etapa 8 concluída. A aplicação exporta diretamente os valores extraídos para CSV e Excel; a etapa de revisão manual foi pulada.
 
 ## Requisitos
 
@@ -47,7 +47,7 @@ python -m pdf_extractor.main
 pytest
 ```
 
-Os testes verificam PDF, navegação, campos nomeados, coordenadas e extração nativa independente por região.
+Os testes verificam PDF, campos, extração nativa e arquivos CSV/XLSX gerados.
 
 ## Funcionalidades atuais
 
@@ -71,12 +71,15 @@ Os testes verificam PDF, navegação, campos nomeados, coordenadas e extração 
 - extração de texto nativo das regiões com PyMuPDF;
 - tabela com campo, página, valor extraído e status;
 - estados `sucesso`, `vazio` e `erro`, sem interromper os demais campos;
+- exportação direta dos valores extraídos para CSV e XLSX;
+- uma linha por documento, com nome do arquivo e campos em ordem;
+- suporte a caracteres acentuados e campos vazios nos arquivos exportados;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
 ## Roadmap imediato
 
-A próxima etapa adicionará revisão e edição manual dos valores extraídos.
+A Etapa 7 de revisão manual foi pulada. A próxima etapa adicionará templates reutilizáveis.
 
 ## Licença
 

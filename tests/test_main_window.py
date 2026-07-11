@@ -516,6 +516,56 @@ def test_extract_button_populates_result_table(
     assert window.result_table.table.item(0, 2).text() == "Empresa Exemplo"
     assert window.result_table.table.item(0, 3).text() == "sucesso"
     assert "1 sucesso" in window.statusBar().currentMessage()
+    assert window.result_table.export_csv_button.isEnabled()
+    assert window.result_table.export_excel_button.isEnabled()
+    window.close()
+
+
+def test_export_buttons_save_csv_and_excel(
+    application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Export buttons should use destinations, add suffixes, and report success."""
+    pdf_path = tmp_path / "origem.pdf"
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 100), "Empresa Exemplo", fontsize=12)
+    document.save(pdf_path)
+    document.close()
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    field = window.field_manager.create(
+        "Cliente",
+        FieldRegion(0, 65, 82, 180, 25),
+    )
+    window._selected_field_id = field.id
+    window._refresh_fields()
+    window._extract_data()
+    destinations = iter(
+        [
+            (str(tmp_path / "resultado_csv"), "Arquivos CSV (*.csv)"),
+            (str(tmp_path / "resultado_excel.xlsx"), "Planilhas Excel (*.xlsx)"),
+        ]
+    )
+    messages: list[str] = []
+    monkeypatch.setattr(
+        QFileDialog,
+        "getSaveFileName",
+        lambda *args, **kwargs: next(destinations),
+    )
+    monkeypatch.setattr(
+        QMessageBox,
+        "information",
+        lambda parent, title, message: messages.append(message),
+    )
+
+    window.result_table.export_csv_button.click()
+    window.result_table.export_excel_button.click()
+
+    assert (tmp_path / "resultado_csv.csv").is_file()
+    assert (tmp_path / "resultado_excel.xlsx").is_file()
+    assert len(messages) == 2
     window.close()
 
 
