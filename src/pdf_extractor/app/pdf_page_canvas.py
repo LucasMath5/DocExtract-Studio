@@ -14,6 +14,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QWidget
 
+from pdf_extractor.models.extraction_field import ExtractionField
 from pdf_extractor.models.field_region import FieldRegion
 
 
@@ -21,7 +22,7 @@ class PdfPageCanvas(QWidget):
     """Render a PDF page and let the user draw one rectangular region."""
 
     region_selected = Signal(object)
-    selection_clear_requested = Signal()
+    field_delete_requested = Signal(str)
     MINIMUM_DRAG_SIZE = 4.0
 
     def __init__(self) -> None:
@@ -31,7 +32,9 @@ class PdfPageCanvas(QWidget):
         self._page_index = 0
         self._pdf_width = 0.0
         self._pdf_height = 0.0
-        self._selected_region: FieldRegion | None = None
+        self._fields: tuple[ExtractionField, ...] = ()
+        self._selected_field_id: str | None = None
+        self._draft_region: FieldRegion | None = None
         self._drag_start: QPointF | None = None
         self._drag_current: QPointF | None = None
 
@@ -81,9 +84,20 @@ class PdfPageCanvas(QWidget):
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.update()
 
-    def set_region(self, region: FieldRegion | None) -> None:
-        """Set the domain region that should be drawn over its page."""
-        self._selected_region = region
+    def set_fields(
+        self,
+        fields: tuple[ExtractionField, ...],
+        selected_field_id: str | None,
+    ) -> None:
+        """Set all named fields and the identifier highlighted by the canvas."""
+        self._fields = fields
+        self._selected_field_id = selected_field_id
+        self._draft_region = None
+        self.update()
+
+    def clear_draft(self) -> None:
+        """Discard a temporary region that was not converted into a field."""
+        self._draft_region = None
         self.update()
 
     def page_display_rect(self) -> QRectF:
@@ -96,15 +110,11 @@ class PdfPageCanvas(QWidget):
 
     def selection_display_rect(self) -> QRectF | None:
         """Return the selected region in canvas coordinates when visible."""
-        if (
-            self._selected_region is None
-            or self._selected_region.page_index != self._page_index
-            or self._pixmap is None
-        ):
+        region = self._visible_selected_region()
+        if region is None or self._pixmap is None:
             return None
 
         page_rect = self.page_display_rect()
-        region = self._selected_region
         return QRectF(
             page_rect.left() + region.x * page_rect.width() / self._pdf_width,
             page_rect.top() + region.y * page_rect.height() / self._pdf_height,
@@ -129,11 +139,15 @@ class PdfPageCanvas(QWidget):
         page_rect = self.page_display_rect()
         painter.drawPixmap(page_rect.topLeft(), self._pixmap)
 
-        selection_rect = self._active_selection_rect()
-        if selection_rect is not None:
-            painter.setPen(QPen(QColor("#0078d4"), 2, Qt.PenStyle.SolidLine))
-            painter.setBrush(QColor(0, 120, 212, 55))
-            painter.drawRect(selection_rect)
+        for field in self._fields:
+            if field.page_index == self._page_index:
+                self._paint_field(painter, field)
+
+        draft_rect = self._active_draft_rect()
+        if draft_rect is not None:
+            painter.setPen(QPen(QColor("#0078d4"), 2, Qt.PenStyle.DashLine))
+            painter.setBrush(QColor(0, 120, 212, 45))
+            painter.drawRect(draft_rect)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """Start a rectangular selection inside the rendered page."""
@@ -180,7 +194,7 @@ class PdfPageCanvas(QWidget):
             return
 
         region = self._page_pixels_to_region(page_pixel_rect)
-        self._selected_region = region
+        self._draft_region = region
         self.region_selected.emit(region)
         self.update()
         event.accept()
@@ -194,19 +208,73 @@ class PdfPageCanvas(QWidget):
             event.accept()
             return
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
-            if self._selected_region is not None:
-                self.selection_clear_requested.emit()
+            if self._selected_field_id is not None:
+                self.field_delete_requested.emit(self._selected_field_id)
                 event.accept()
                 return
         super().keyPressEvent(event)
 
-    def _active_selection_rect(self) -> QRectF | None:
+    def _active_draft_rect(self) -> QRectF | None:
         if self._drag_start is not None and self._drag_current is not None:
             page_rect = self.page_display_rect()
             drag_rect = QRectF(self._drag_start, self._drag_current).normalized()
             drag_rect.translate(page_rect.topLeft())
             return drag_rect
-        return self.selection_display_rect()
+        if (
+            self._draft_region is None
+            or self._draft_region.page_index != self._page_index
+        ):
+            return None
+        return self._region_display_rect(self._draft_region)
+
+    def _visible_selected_region(self) -> FieldRegion | None:
+        if self._selected_field_id is None:
+            return None
+        field = next(
+            (field for field in self._fields if field.id == self._selected_field_id),
+            None,
+        )
+        if field is None or field.page_index != self._page_index:
+            return None
+        return field.region
+
+    def _region_display_rect(self, region: FieldRegion) -> QRectF:
+        page_rect = self.page_display_rect()
+        return QRectF(
+            page_rect.left() + region.x * page_rect.width() / self._pdf_width,
+            page_rect.top() + region.y * page_rect.height() / self._pdf_height,
+            region.width * page_rect.width() / self._pdf_width,
+            region.height * page_rect.height() / self._pdf_height,
+        )
+
+    def _paint_field(self, painter: QPainter, field: ExtractionField) -> None:
+        field_rect = self._region_display_rect(field.region)
+        is_selected = field.id == self._selected_field_id
+        color = QColor("#f28c28") if is_selected else QColor("#0078d4")
+        painter.setPen(QPen(color, 3 if is_selected else 2))
+        painter.setBrush(QColor(color.red(), color.green(), color.blue(), 55))
+        painter.drawRect(field_rect)
+
+        metrics = painter.fontMetrics()
+        label_width = min(
+            max(70, metrics.horizontalAdvance(field.name) + 12),
+            max(70, int(field_rect.width())),
+        )
+        label_height = metrics.height() + 6
+        page_rect = self.page_display_rect()
+        label_top = max(page_rect.top(), field_rect.top() - label_height)
+        label_rect = QRectF(field_rect.left(), label_top, label_width, label_height)
+        painter.fillRect(label_rect, color)
+        painter.setPen(QColor("#ffffff"))
+        painter.drawText(
+            label_rect.adjusted(6, 2, -4, -2),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            metrics.elidedText(
+                field.name,
+                Qt.TextElideMode.ElideRight,
+                max(20, label_width - 10),
+            ),
+        )
 
     def _clamped_page_position(self, widget_position: QPointF) -> QPointF:
         page_rect = self.page_display_rect()

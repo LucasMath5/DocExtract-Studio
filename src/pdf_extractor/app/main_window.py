@@ -7,10 +7,19 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShortcut
-from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
+from PySide6.QtWidgets import (
+    QFileDialog,
+    QInputDialog,
+    QMainWindow,
+    QMessageBox,
+    QSplitter,
+)
 
+from pdf_extractor.app.field_panel import FieldPanel
 from pdf_extractor.app.pdf_viewer import PdfViewer
+from pdf_extractor.core.field_manager import FieldManager, FieldValidationError
 from pdf_extractor.core.pdf_service import PdfService, PdfServiceError
+from pdf_extractor.models.extraction_field import ExtractionField
 from pdf_extractor.models.field_region import FieldRegion
 from pdf_extractor.utils.app_icon import load_application_icon
 
@@ -28,11 +37,13 @@ class MainWindow(QMainWindow):
     def __init__(self, pdf_service: PdfService | None = None) -> None:
         super().__init__()
         self.pdf_service = pdf_service or PdfService()
+        self.field_manager = FieldManager()
         self.pdf_viewer = PdfViewer()
+        self.field_panel = FieldPanel()
         self._current_page_index = 0
         self._page_count = 0
         self._zoom_percent = self.DEFAULT_ZOOM
-        self._selected_region: FieldRegion | None = None
+        self._selected_field_id: str | None = None
 
         self.setWindowTitle("Visual PDF Data Extractor")
         self.setWindowIcon(load_application_icon())
@@ -42,7 +53,8 @@ class MainWindow(QMainWindow):
         self._create_menu()
         self._create_keyboard_shortcuts()
         self._connect_viewer_controls()
-        self.setCentralWidget(self.pdf_viewer)
+        self._connect_field_panel()
+        self._create_central_area()
         self.statusBar().showMessage("Pronto")
 
     def _create_actions(self) -> None:
@@ -88,7 +100,23 @@ class MainWindow(QMainWindow):
         self.pdf_viewer.zoom_in_requested.connect(self._zoom_in)
         self.pdf_viewer.reset_zoom_requested.connect(self._reset_zoom)
         self.pdf_viewer.region_selected.connect(self._handle_region_selected)
-        self.pdf_viewer.selection_clear_requested.connect(self._clear_selection)
+        self.pdf_viewer.field_delete_requested.connect(self._request_delete_field)
+
+    def _connect_field_panel(self) -> None:
+        """Connect selection and field management actions from the side panel."""
+        self.field_panel.field_selected.connect(self._select_field)
+        self.field_panel.rename_requested.connect(self._rename_field)
+        self.field_panel.delete_requested.connect(self._request_delete_field)
+
+    def _create_central_area(self) -> None:
+        """Place the PDF viewer and field panel in a resizable splitter."""
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(self.pdf_viewer)
+        splitter.addWidget(self.field_panel)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
+        splitter.setSizes([760, 240])
+        self.setCentralWidget(splitter)
 
     def _select_pdf(self) -> None:
         """Ask the user for a PDF and load its first page."""
@@ -100,6 +128,17 @@ class MainWindow(QMainWindow):
         )
         if not file_path:
             return
+
+        if self.field_manager.fields:
+            answer = QMessageBox.question(
+                self,
+                "Descartar campos?",
+                "Abrir outro PDF removerá todos os campos mapeados. Continuar?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
 
         self._load_pdf(Path(file_path))
 
@@ -127,8 +166,9 @@ class MainWindow(QMainWindow):
         self._current_page_index = 0
         self._page_count = document_info.page_count
         self._zoom_percent = self.DEFAULT_ZOOM
-        self._selected_region = None
-        self.pdf_viewer.set_selected_region(None)
+        self.field_manager.clear()
+        self._selected_field_id = None
+        self._refresh_fields()
         LOGGER.info("PDF carregado: %s", document_info.file_name)
         self.setWindowTitle(f"{document_info.file_name} - Visual PDF Data Extractor")
         self._update_document_state()
@@ -191,7 +231,10 @@ class MainWindow(QMainWindow):
                 page_size.width,
                 page_size.height,
             )
-            self.pdf_viewer.set_selected_region(self._selected_region)
+            self.pdf_viewer.set_fields(
+                self.field_manager.fields,
+                self._selected_field_id,
+            )
         except (PdfServiceError, ValueError) as error:
             LOGGER.warning("Falha ao renderizar PDF: %s", error)
             QMessageBox.critical(self, "Erro ao renderizar página", str(error))
@@ -199,20 +242,91 @@ class MainWindow(QMainWindow):
         return True
 
     def _handle_region_selected(self, region: object) -> None:
-        """Store the single selected region, replacing any previous one."""
+        """Ask for a name and convert a temporary region into a field."""
         if not isinstance(region, FieldRegion):
             return
-        self._selected_region = region
-        self.pdf_viewer.set_selected_region(region)
+        while True:
+            name, accepted = QInputDialog.getText(
+                self,
+                "Novo campo",
+                "Nome do campo:",
+            )
+            if not accepted:
+                self.pdf_viewer.clear_draft_region()
+                return
+            try:
+                field = self.field_manager.create(name, region)
+            except FieldValidationError as error:
+                QMessageBox.warning(self, "Nome inválido", str(error))
+                continue
+            self._selected_field_id = field.id
+            self._refresh_fields()
+            self._update_document_state()
+            return
+
+    def _select_field(self, field_id: str) -> None:
+        """Select a field and navigate to its page when necessary."""
+        field = self.field_manager.get(field_id)
+        if field is None:
+            return
+        if field.page_index != self._current_page_index:
+            if not self._render_view(field.page_index, self._zoom_percent):
+                return
+            self._current_page_index = field.page_index
+        self._selected_field_id = field.id
+        self._refresh_fields()
         self._update_document_state()
 
-    def _clear_selection(self) -> None:
-        """Delete the current region and remove its visual overlay."""
-        if self._selected_region is None:
+    def _rename_field(self, field_id: str) -> None:
+        """Prompt for a unique replacement name while preserving field data."""
+        field = self.field_manager.get(field_id)
+        if field is None:
             return
-        self._selected_region = None
-        self.pdf_viewer.set_selected_region(None)
+        while True:
+            name, accepted = QInputDialog.getText(
+                self,
+                "Renomear campo",
+                "Novo nome:",
+                text=field.name,
+            )
+            if not accepted:
+                return
+            try:
+                self.field_manager.rename(field_id, name)
+            except FieldValidationError as error:
+                QMessageBox.warning(self, "Nome inválido", str(error))
+                continue
+            self._selected_field_id = field_id
+            self._refresh_fields()
+            return
+
+    def _request_delete_field(self, field_id: str) -> None:
+        """Confirm and delete a field without affecting the remaining fields."""
+        field = self.field_manager.get(field_id)
+        if field is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Excluir campo",
+            f'Excluir o campo "{field.name}"?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.field_manager.delete(field_id)
+        remaining_fields = self.field_manager.fields
+        self._selected_field_id = (
+            remaining_fields[0].id if remaining_fields else None
+        )
+        self._refresh_fields()
         self._update_document_state()
+
+    def _refresh_fields(self) -> None:
+        """Synchronize the canvas and side panel with the field manager."""
+        fields = self.field_manager.fields
+        self.pdf_viewer.set_fields(fields, self._selected_field_id)
+        self.field_panel.set_fields(fields, self._selected_field_id)
 
     def _update_document_state(self) -> None:
         """Synchronize controls and status text with page and zoom state."""
@@ -225,15 +339,11 @@ class MainWindow(QMainWindow):
         )
         document_info = self.pdf_service.document_info
         if document_info is not None:
-            selection_status = ""
-            if self._selected_region is not None:
-                selection_status = (
-                    f" - Seleção na página {self._selected_region.page_index + 1}"
-                )
+            field_status = f" - {len(self.field_manager.fields)} campo(s)"
             self.statusBar().showMessage(
                 f"{document_info.file_name} - "
                 f"Página {self._current_page_index + 1} de {self._page_count} - "
-                f"Zoom {self._zoom_percent}%{selection_status}"
+                f"Zoom {self._zoom_percent}%{field_status}"
             )
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802

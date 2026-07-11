@@ -2,7 +2,7 @@
 
 Aplicação desktop open source para mapear visualmente regiões de documentos PDF e, nas próximas etapas, extrair seus dados para planilhas.
 
-> Status: Etapa 4 concluída. A aplicação permite selecionar visualmente uma região retangular em coordenadas nativas do PDF.
+> Status: Etapa 5 concluída. A aplicação permite criar e gerenciar múltiplos campos nomeados sobre as páginas do PDF.
 
 ## Requisitos
 
@@ -47,7 +47,7 @@ python -m pdf_extractor.main
 pytest
 ```
 
-Os testes verificam o serviço de PDF, navegação, zoom, conversão de coordenadas e seleção visual de regiões.
+Os testes verificam o serviço de PDF, navegação, zoom, coordenadas, campos nomeados e gerenciamento pelo painel lateral.
 
 ## Funcionalidades atuais
 
@@ -61,15 +61,19 @@ Os testes verificam o serviço de PDF, navegação, zoom, conversão de coordena
 - zoom entre 50% e 300%, com redefinição para 100%;
 - atalhos `←` e `→` para navegar, `Ctrl++` e `Ctrl+-` para controlar o zoom;
 - ícone próprio na janela, no alternador de tarefas e na barra de tarefas;
-- seleção retangular com o mouse, preservada corretamente durante o zoom;
-- exclusão da seleção pelo botão `Limpar seleção` ou pela tecla `Delete`;
+- criação de múltiplos campos nomeados a partir de seleções retangulares;
+- painel lateral para selecionar, renomear e excluir campos;
+- nomes únicos, com validação de valores vazios e duplicados;
+- destaque visual do campo selecionado e navegação automática até sua página;
+- regiões preservadas corretamente durante navegação e zoom;
+- exclusão do campo selecionado pelo painel ou pela tecla `Delete`;
 - cancelamento de uma seleção em andamento com `Esc`;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
 ## Roadmap imediato
 
-A Etapa 5 permitirá transformar regiões em campos nomeados e gerenciá-los em um painel lateral.
+A Etapa 6 adicionará a extração de texto nativo das regiões mapeadas.
 
 ## Licença
 

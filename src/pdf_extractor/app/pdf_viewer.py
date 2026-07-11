@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from pdf_extractor.app.pdf_page_canvas import PdfPageCanvas
-from pdf_extractor.models.field_region import FieldRegion
+from pdf_extractor.models.extraction_field import ExtractionField
 
 
 class PdfViewer(QWidget):
@@ -27,7 +27,7 @@ class PdfViewer(QWidget):
     zoom_in_requested = Signal()
     reset_zoom_requested = Signal()
     region_selected = Signal(object)
-    selection_clear_requested = Signal()
+    field_delete_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -71,17 +71,6 @@ class PdfViewer(QWidget):
         self.reset_zoom_button.setToolTip("Restaurar zoom para 100%")
         self.reset_zoom_button.clicked.connect(self.reset_zoom_requested.emit)
 
-        selection_separator = QFrame()
-        selection_separator.setFrameShape(QFrame.Shape.VLine)
-        selection_separator.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.clear_selection_button = QPushButton("Limpar seleção")
-        self.clear_selection_button.setToolTip("Excluir a seleção atual (Delete)")
-        self.clear_selection_button.setEnabled(False)
-        self.clear_selection_button.clicked.connect(
-            self.selection_clear_requested.emit
-        )
-
         controls_layout = QHBoxLayout()
         controls_layout.setContentsMargins(8, 6, 8, 6)
         controls_layout.addWidget(self.file_name_label)
@@ -94,13 +83,11 @@ class PdfViewer(QWidget):
         controls_layout.addWidget(self.zoom_indicator)
         controls_layout.addWidget(self.zoom_in_button)
         controls_layout.addWidget(self.reset_zoom_button)
-        controls_layout.addWidget(selection_separator)
-        controls_layout.addWidget(self.clear_selection_button)
 
         self.page_canvas = PdfPageCanvas()
         self.page_canvas.region_selected.connect(self.region_selected.emit)
-        self.page_canvas.selection_clear_requested.connect(
-            self.selection_clear_requested.emit
+        self.page_canvas.field_delete_requested.connect(
+            self.field_delete_requested.emit
         )
 
         self.scroll_area = QScrollArea()
@@ -123,7 +110,7 @@ class PdfViewer(QWidget):
             "Nenhum documento carregado.\n\n"
             "Use Arquivo > Abrir PDF para começar."
         )
-        self.set_selected_region(None)
+        self.set_fields((), None)
         self.update_controls(0, 0, 100, 50, 300)
 
     def show_page(
@@ -149,10 +136,17 @@ class PdfViewer(QWidget):
         self.page_canvas.set_page(pixmap, page_index, pdf_width, pdf_height)
         self._scroll_to_page_start()
 
-    def set_selected_region(self, region: FieldRegion | None) -> None:
-        """Display the selected region and synchronize its delete control."""
-        self.page_canvas.set_region(region)
-        self.clear_selection_button.setEnabled(region is not None)
+    def set_fields(
+        self,
+        fields: tuple[ExtractionField, ...],
+        selected_field_id: str | None,
+    ) -> None:
+        """Display all fields and highlight the selected identifier."""
+        self.page_canvas.set_fields(fields, selected_field_id)
+
+    def clear_draft_region(self) -> None:
+        """Remove a temporary selection canceled by the naming dialog."""
+        self.page_canvas.clear_draft()
 
     def update_controls(
         self,

@@ -10,7 +10,7 @@ import fitz
 import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 
 from pdf_extractor.app.main_window import MainWindow
 from pdf_extractor.models.field_region import FieldRegion
@@ -47,6 +47,7 @@ def test_main_window_has_expected_initial_state(application: QApplication) -> No
     assert not window.pdf_viewer.previous_button.isEnabled()
     assert not window.pdf_viewer.next_button.isEnabled()
     assert not window.pdf_viewer.zoom_in_button.isEnabled()
+    assert window.field_panel.title_label.text() == "Campos mapeados (0)"
 
     window.close()
 
@@ -160,7 +161,12 @@ def test_opening_another_pdf_resets_page_and_zoom(
     window._load_pdf(first_pdf)
     window.pdf_viewer.next_button.click()
     window.pdf_viewer.zoom_in_button.click()
-    window._handle_region_selected(FieldRegion(1, 20, 30, 100, 40))
+    field = window.field_manager.create(
+        "Campo temporário",
+        FieldRegion(1, 20, 30, 100, 40),
+    )
+    window._selected_field_id = field.id
+    window._refresh_fields()
 
     window._load_pdf(second_pdf)
 
@@ -168,8 +174,9 @@ def test_opening_another_pdf_resets_page_and_zoom(
     assert window.pdf_viewer.zoom_indicator.text() == "100%"
     assert not window.pdf_viewer.previous_button.isEnabled()
     assert not window.pdf_viewer.next_button.isEnabled()
-    assert window._selected_region is None
-    assert not window.pdf_viewer.clear_selection_button.isEnabled()
+    assert not window.field_manager.fields
+    assert window._selected_field_id is None
+    assert window.field_panel.title_label.text() == "Campos mapeados (0)"
     window.close()
 
 
@@ -211,15 +218,23 @@ def test_keyboard_shortcuts_navigate_and_control_zoom(
 
 def test_mouse_selection_creates_pdf_region_and_delete_clears_it(
     application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Dragging on the page should create PDF coordinates that Delete clears."""
+    """Dragging should create named fields and Delete should remove one."""
     pdf_path = tmp_path / "selecao.pdf"
     create_synthetic_pdf(pdf_path)
     window = MainWindow()
     window._load_pdf(pdf_path)
     window.show()
     application.processEvents()
+    names = iter([("Primeiro", True), ("Segundo", True)])
+    monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: next(names))
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
 
     canvas = window.pdf_viewer.page_canvas
     page_rect = canvas.page_display_rect()
@@ -230,15 +245,14 @@ def test_mouse_selection_creates_pdf_region_and_delete_clears_it(
     QTest.mouseMove(canvas, end)
     QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=end)
 
-    region = window._selected_region
-    assert region is not None
+    region = window.field_manager.fields[0].region
     assert region.page_index == 0
     assert region.x == pytest.approx(50, abs=1)
     assert region.y == pytest.approx(80, abs=1)
     assert region.width == pytest.approx(160, abs=1)
     assert region.height == pytest.approx(80, abs=1)
     assert canvas.selection_display_rect() is not None
-    assert window.pdf_viewer.clear_selection_button.isEnabled()
+    assert window.field_panel.title_label.text() == "Campos mapeados (1)"
 
     reverse_start = QPoint(int(page_rect.left() + 300), int(page_rect.top() + 220))
     reverse_end = QPoint(int(page_rect.left() + 100), int(page_rect.top() + 120))
@@ -246,17 +260,16 @@ def test_mouse_selection_creates_pdf_region_and_delete_clears_it(
     QTest.mouseMove(canvas, reverse_end)
     QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=reverse_end)
 
-    replacement = window._selected_region
-    assert replacement is not None
+    assert len(window.field_manager.fields) == 2
+    replacement = window.field_manager.fields[1].region
     assert replacement.x == pytest.approx(100, abs=1)
     assert replacement.y == pytest.approx(120, abs=1)
     assert replacement.width == pytest.approx(200, abs=1)
     assert replacement.height == pytest.approx(100, abs=1)
 
     QTest.keyClick(canvas, Qt.Key.Key_Delete)
-    assert window._selected_region is None
-    assert canvas.selection_display_rect() is None
-    assert not window.pdf_viewer.clear_selection_button.isEnabled()
+    assert len(window.field_manager.fields) == 1
+    assert window.field_manager.fields[0].name == "Primeiro"
     window.close()
 
 
@@ -281,13 +294,14 @@ def test_escape_cancels_selection_in_progress(
     QTest.keyClick(canvas, Qt.Key.Key_Escape)
     QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=end)
 
-    assert window._selected_region is None
+    assert not window.field_manager.fields
     assert canvas.selection_display_rect() is None
     window.close()
 
 
 def test_mouse_selection_uses_pdf_coordinates_at_zoom(
     application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """A drag on a zoomed page should still store native PDF coordinates."""
@@ -298,6 +312,11 @@ def test_mouse_selection_uses_pdf_coordinates_at_zoom(
     window._set_zoom(200)
     window.show()
     application.processEvents()
+    monkeypatch.setattr(
+        QInputDialog,
+        "getText",
+        lambda *args, **kwargs: ("Campo com zoom", True),
+    )
 
     canvas = window.pdf_viewer.page_canvas
     page_rect = canvas.page_display_rect()
@@ -307,8 +326,7 @@ def test_mouse_selection_uses_pdf_coordinates_at_zoom(
     QTest.mouseMove(canvas, end)
     QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=end)
 
-    region = window._selected_region
-    assert region is not None
+    region = window.field_manager.fields[0].region
     assert region.x == pytest.approx(50, abs=1)
     assert region.y == pytest.approx(60, abs=1)
     assert region.width == pytest.approx(100, abs=1)
@@ -325,7 +343,12 @@ def test_selection_follows_zoom_and_appears_only_on_its_page(
     create_synthetic_pdf(pdf_path, page_count=2)
     window = MainWindow()
     window._load_pdf(pdf_path)
-    window._handle_region_selected(FieldRegion(0, 50, 60, 120, 80))
+    field = window.field_manager.create(
+        "Campo",
+        FieldRegion(0, 50, 60, 120, 80),
+    )
+    window._selected_field_id = field.id
+    window._refresh_fields()
 
     initial_rect = window.pdf_viewer.page_canvas.selection_display_rect()
     assert initial_rect is not None
@@ -341,6 +364,126 @@ def test_selection_follows_zoom_and_appears_only_on_its_page(
 
     window.pdf_viewer.previous_button.click()
     assert window.pdf_viewer.page_canvas.selection_display_rect() is not None
+    window.close()
+
+
+def test_field_dialog_retries_invalid_name(
+    application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The naming dialog should retry after an empty field name."""
+    pdf_path = tmp_path / "nomes.pdf"
+    create_synthetic_pdf(pdf_path)
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    answers = iter([("   ", True), ("Cliente", True)])
+    warnings: list[str] = []
+    monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda parent, title, message: warnings.append(message),
+    )
+
+    window._handle_region_selected(FieldRegion(0, 10, 20, 30, 40))
+
+    assert [field.name for field in window.field_manager.fields] == ["Cliente"]
+    assert warnings == ["O nome do campo não pode ser vazio."]
+    window.close()
+
+
+def test_panel_selection_navigates_to_field_page(
+    application: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Selecting a panel item should navigate and highlight its field."""
+    pdf_path = tmp_path / "painel_paginas.pdf"
+    create_synthetic_pdf(pdf_path, page_count=2)
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    first = window.field_manager.create(
+        "Primeira página",
+        FieldRegion(0, 10, 20, 80, 30),
+    )
+    second = window.field_manager.create(
+        "Segunda página",
+        FieldRegion(1, 15, 25, 90, 35),
+    )
+    window._selected_field_id = first.id
+    window._refresh_fields()
+
+    window.field_panel.field_list.setCurrentRow(1)
+
+    assert window._current_page_index == 1
+    assert window._selected_field_id == second.id
+    assert window.pdf_viewer.page_indicator.text() == "Página 2 de 2"
+    assert window.pdf_viewer.page_canvas.selection_display_rect() is not None
+    window.close()
+
+
+def test_rename_rejects_duplicate_then_updates_field(
+    application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Renaming should preserve data and retry after a duplicate name."""
+    pdf_path = tmp_path / "renomear.pdf"
+    create_synthetic_pdf(pdf_path)
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    first = window.field_manager.create("Cliente", FieldRegion(0, 10, 20, 80, 30))
+    second = window.field_manager.create("Data", FieldRegion(0, 10, 60, 80, 30))
+    window._selected_field_id = second.id
+    window._refresh_fields()
+    answers = iter([("CLIENTE", True), ("Data do documento", True)])
+    warnings: list[str] = []
+    monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda parent, title, message: warnings.append(message),
+    )
+
+    window._rename_field(second.id)
+
+    renamed = window.field_manager.get(second.id)
+    assert renamed is not None
+    assert renamed.name == "Data do documento"
+    assert renamed.region == second.region
+    assert window.field_manager.get(first.id) == first
+    assert warnings == ["Já existe um campo com esse nome."]
+    window.close()
+
+
+def test_delete_field_requires_confirmation(
+    application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A field should remain after No and be removed after Yes."""
+    pdf_path = tmp_path / "excluir.pdf"
+    create_synthetic_pdf(pdf_path)
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    field = window.field_manager.create("Cliente", FieldRegion(0, 10, 20, 80, 30))
+    window._selected_field_id = field.id
+    window._refresh_fields()
+    answers = iter(
+        [QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes]
+    )
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *args, **kwargs: next(answers),
+    )
+
+    window._request_delete_field(field.id)
+    assert window.field_manager.get(field.id) is not None
+
+    window._request_delete_field(field.id)
+    assert window.field_manager.get(field.id) is None
+    assert window.field_panel.title_label.text() == "Campos mapeados (0)"
     window.close()
 
 
