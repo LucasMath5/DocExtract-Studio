@@ -15,12 +15,13 @@ class ExcelExporter:
     """Write an export dataset to a compact, readable XLSX workbook."""
 
     def export(self, file_path: Path, dataset: ExportDataset) -> None:
-        """Create one worksheet containing headers and one document row."""
+        """Create one worksheet containing headers and all document rows."""
         workbook = Workbook()
         worksheet = workbook.active
         worksheet.title = "Dados extraídos"
         worksheet.append(dataset.headers)
-        worksheet.append(dataset.values)
+        for row in dataset.rows:
+            worksheet.append(row)
         worksheet.freeze_panes = "A2"
         worksheet.auto_filter.ref = worksheet.dimensions
 
@@ -30,8 +31,15 @@ class ExcelExporter:
             cell.fill = header_fill
 
         for column_index, header in enumerate(dataset.headers, start=1):
-            value = dataset.values[column_index - 1]
-            width = min(max(len(header), len(value)) + 2, 50)
+            values = (
+                row[column_index - 1]
+                for row in dataset.rows
+                if column_index <= len(row)
+            )
+            width = min(
+                max((len(header), *(len(value) for value in values))) + 2,
+                50,
+            )
             worksheet.column_dimensions[get_column_letter(column_index)].width = width
 
         try:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import fitz
 import pytest
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QElapsedTimer, QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 
@@ -49,6 +49,8 @@ def test_main_window_has_expected_initial_state(application: QApplication) -> No
     assert window.save_template_action.text() == "Salvar template"
     assert window.import_template_action.text() == "Importar template..."
     assert window.export_template_action.text() == "Exportar template..."
+    assert window.batch_files_action.text() == "Processar PDFs..."
+    assert window.batch_folder_action.text() == "Processar pasta..."
     assert window.pdf_viewer.page_indicator.text() == "Página 0 de 0"
     assert not window.pdf_viewer.previous_button.isEnabled()
     assert not window.pdf_viewer.next_button.isEnabled()
@@ -699,6 +701,100 @@ def test_import_invalid_template_shows_friendly_error(
     assert messages
     assert messages[0][0] == "Template inválido"
     assert "JSON inválido" in messages[0][1]
+    window.close()
+
+
+def test_batch_action_processes_multiple_pdfs_in_worker_thread(
+    application: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The batch UI should load a template and report every selected PDF."""
+    first_pdf = tmp_path / "lote_01.pdf"
+    second_pdf = tmp_path / "lote_02.pdf"
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 100), "Empresa Exemplo", fontsize=12)
+    document.save(first_pdf)
+    document.close()
+    create_synthetic_pdf(second_pdf)
+    template_path = tmp_path / "lote_template.json"
+    template_service = TemplateService()
+    template = template_service.create(
+        "Lote genérico",
+        (
+            ExtractionField(
+                "cliente",
+                "Cliente",
+                FieldRegion(0, 65, 82, 180, 25),
+            ),
+        ),
+    )
+    template_service.save(template, template_path)
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileNames",
+        lambda *args, **kwargs: (
+            [str(first_pdf), str(second_pdf)],
+            "Documentos PDF (*.pdf)",
+        ),
+    )
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *args, **kwargs: (str(template_path), "Templates JSON (*.json)"),
+    )
+    window = MainWindow()
+    reports: list[object] = []
+    window.batch_controller.report_ready.connect(reports.append)
+
+    window.batch_files_action.trigger()
+    timer = QElapsedTimer()
+    timer.start()
+    while not reports and timer.elapsed() < 5_000:
+        application.processEvents()
+        QTest.qWait(10)
+
+    assert reports
+    report = reports[0]
+    assert report.processed == 2
+    assert report.success_count == 1
+    assert report.review_count == 1
+    assert window.batch_controller.result_dialog is not None
+    preview = window.batch_controller.result_dialog.table
+    assert preview.rowCount() == 2
+    assert preview.columnCount() == 4
+    assert [
+        preview.horizontalHeaderItem(column).text()
+        for column in range(preview.columnCount())
+    ] == ["arquivo", "status", "erro", "Cliente"]
+    assert preview.item(0, 0).text() == first_pdf.name
+    assert preview.item(0, 3).text() == "Empresa Exemplo"
+    assert preview.item(1, 1).text() == "revisão necessária"
+    assert preview.item(1, 3).text() == ""
+    while window.batch_controller.is_running and timer.elapsed() < 5_000:
+        application.processEvents()
+        QTest.qWait(10)
+    window.batch_controller.result_dialog.close()
+    window.close()
+
+
+def test_batch_folder_discovery_is_sorted_and_ignores_non_pdfs(
+    application: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Folder processing should include only top-level PDFs in stable order."""
+    (tmp_path / "b.PDF").write_bytes(b"pdf")
+    (tmp_path / "A.pdf").write_bytes(b"pdf")
+    (tmp_path / "notas.txt").write_text("ignorar", encoding="utf-8")
+    nested = tmp_path / "subpasta"
+    nested.mkdir()
+    (nested / "interno.pdf").write_bytes(b"pdf")
+    window = MainWindow()
+
+    paths = window.batch_controller.pdfs_in_folder(tmp_path)
+
+    assert [path.name for path in paths] == ["A.pdf", "b.PDF"]
     window.close()
 
 

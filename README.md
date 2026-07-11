@@ -2,7 +2,7 @@
 
 Aplicação desktop open source para mapear visualmente regiões de documentos PDF e, nas próximas etapas, extrair seus dados para planilhas.
 
-> Status: Etapa 9 concluída. A aplicação salva e carrega templates JSON reutilizáveis; a etapa de revisão manual foi pulada.
+> Status: Etapa 11 concluída. A aplicação aplica templates a vários PDFs em lote, com progresso, cancelamento, relatório e exportação consolidada. As etapas de revisão manual e validação de dados foram puladas.
 
 ## Requisitos
 
@@ -47,7 +47,7 @@ python -m pdf_extractor.main
 pytest
 ```
 
-Os testes verificam PDF, campos, extração nativa, arquivos CSV/XLSX e templates JSON.
+Os testes verificam PDF, campos, extração nativa, arquivos CSV/XLSX, templates JSON e processamento em lote.
 
 ## Funcionalidades atuais
 
@@ -81,12 +81,22 @@ Os testes verificam PDF, campos, extração nativa, arquivos CSV/XLSX e template
 - restauração das regiões, nomes e ordem dos campos em outro PDF;
 - edição e salvamento de templates importados;
 - templates portáteis, sem armazenar o caminho do PDF de origem;
+- seleção de vários PDFs para processamento em lote;
+- seleção dos PDFs existentes diretamente em uma pasta;
+- aplicação de um template JSON a cada documento do lote;
+- processamento em worker thread para manter a interface responsiva;
+- progresso por arquivo e cancelamento seguro entre documentos;
+- falha isolada: um PDF inválido não interrompe os demais;
+- relatório com total, processados, sucessos, atenção e falhas;
+- detalhe do erro associado a cada arquivo;
+- prévia da tabela consolidada antes de salvar, com uma coluna por campo;
+- exportação consolidada do lote para CSV ou Excel;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
 ## Roadmap imediato
 
-A Etapa 7 de revisão manual foi pulada. A próxima etapa prevista é o processamento em lote; a etapa de tipos e validação de dados também foi removida do escopo por decisão do projeto.
+As etapas 7 e 10, de revisão manual e validação de dados, foram puladas. A Etapa 12 de suporte a ZIP também está fora do escopo. A próxima etapa prevista é o fallback de OCR para PDFs digitalizados.
 
 ## Licença
 

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QSplitter,
 )
 
+from pdf_extractor.app.batch_controller import BatchController
 from pdf_extractor.app.field_panel import FieldPanel
 from pdf_extractor.app.extraction_result_table import ExtractionResultTable
 from pdf_extractor.app.pdf_viewer import PdfViewer
@@ -56,6 +57,7 @@ class MainWindow(QMainWindow):
         )
         self.template_controller.fields_replaced.connect(self._replace_fields)
         self.template_controller.state_changed.connect(self._update_document_state)
+        self.batch_controller = BatchController(self)
         self.pdf_viewer = PdfViewer()
         self.field_panel = FieldPanel()
         self.result_table = ExtractionResultTable()
@@ -90,6 +92,9 @@ class MainWindow(QMainWindow):
         self.import_template_action = self.template_controller.import_action
         self.export_template_action = self.template_controller.export_action
 
+        self.batch_files_action = self.batch_controller.select_files_action
+        self.batch_folder_action = self.batch_controller.select_folder_action
+
         self.exit_action = QAction("Sair", self)
         self.exit_action.setShortcut("Ctrl+Q")
         self.exit_action.setStatusTip("Fechar a aplicação")
@@ -108,6 +113,10 @@ class MainWindow(QMainWindow):
         template_menu.addSeparator()
         template_menu.addAction(self.import_template_action)
         template_menu.addAction(self.export_template_action)
+
+        batch_menu = self.menuBar().addMenu("Lote")
+        batch_menu.addAction(self.batch_files_action)
+        batch_menu.addAction(self.batch_folder_action)
 
     def _create_keyboard_shortcuts(self) -> None:
         """Register page navigation and zoom shortcuts for the window."""
@@ -515,6 +524,10 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         """Log application shutdown and accept the close event."""
+        if not self.batch_controller.shutdown():
+            LOGGER.warning("O lote ainda está finalizando; fechamento adiado")
+            event.ignore()
+            return
         self.pdf_service.close()
         LOGGER.info("Fechando Visual PDF Data Extractor")
         event.accept()
