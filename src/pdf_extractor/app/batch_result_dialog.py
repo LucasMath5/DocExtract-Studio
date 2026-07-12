@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtGui import QColor
@@ -27,6 +28,8 @@ from pdf_extractor.exporters.base import (
 )
 from pdf_extractor.exporters.csv_exporter import CsvExporter
 from pdf_extractor.exporters.excel_exporter import ExcelExporter
+from pdf_extractor.app.pdf_rename_dialog import PdfRenameDialog
+from pdf_extractor.core.pdf_rename_service import RenamePlanStatus
 from pdf_extractor.models.batch_result import BatchDocumentStatus, BatchReport
 from pdf_extractor.models.extraction_template import ExtractionTemplate
 
@@ -88,12 +91,17 @@ class BatchResultDialog(QDialog):
         self.export_excel_button.setEnabled(bool(report.documents))
         self.export_excel_button.clicked.connect(self._export_excel)
 
+        self.rename_pdfs_button = QPushButton("Renomear PDFs pelos campos")
+        self.rename_pdfs_button.setEnabled(bool(report.documents))
+        self.rename_pdfs_button.clicked.connect(self._rename_pdfs)
+
         close_button = QPushButton("Fechar")
         close_button.clicked.connect(self.close)
 
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.export_csv_button)
         button_layout.addWidget(self.export_excel_button)
+        button_layout.addWidget(self.rename_pdfs_button)
         button_layout.addStretch(1)
         button_layout.addWidget(close_button)
 
@@ -104,6 +112,8 @@ class BatchResultDialog(QDialog):
         layout.addLayout(button_layout)
 
     def _populate_table(self) -> None:
+        self.table.clearContents()
+        self.table.setRowCount(len(self.dataset.rows))
         for row, (document, values) in enumerate(
             zip(self.report.documents, self.dataset.rows, strict=True)
         ):
@@ -112,9 +122,36 @@ class BatchResultDialog(QDialog):
             status_item.setForeground(self.STATUS_COLORS[document.status])
             status_item.setToolTip(document.status.value)
             if document.error_message:
-                items[2].setToolTip(document.error_message)
+                items[3].setToolTip(document.error_message)
             for column, item in enumerate(items):
                 self.table.setItem(row, column, item)
+
+    def _rename_pdfs(self) -> None:
+        """Configure, preview, and apply filenames based on extracted values."""
+        dialog = PdfRenameDialog(
+            self.report.documents,
+            self.template.fields,
+            self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.result_items:
+            return
+
+        documents = list(self.report.documents)
+        for item in dialog.result_items:
+            if (
+                item.status == RenamePlanStatus.RENAMED
+                and item.destination_path is not None
+            ):
+                documents[item.document_index] = replace(
+                    documents[item.document_index],
+                    file_path=item.destination_path,
+                )
+        self.report = replace(self.report, documents=tuple(documents))
+        self.dataset = build_batch_export_dataset(
+            self.template.fields,
+            self.report.documents,
+        )
+        self._populate_table()
 
     def _export_csv(self) -> None:
         self._export(

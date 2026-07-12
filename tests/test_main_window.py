@@ -805,6 +805,10 @@ def test_batch_action_processes_multiple_pdfs_in_worker_thread(
     assert report.success_count == 2
     assert report.review_count == 0
     assert window.batch_controller.result_dialog is not None
+    assert (
+        window.batch_controller.result_dialog.rename_pdfs_button.text()
+        == "Renomear PDFs pelos campos"
+    )
     preview = window.batch_controller.result_dialog.table
     assert preview.rowCount() == 2
     assert preview.columnCount() == 5

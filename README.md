@@ -118,6 +118,10 @@ Os testes verificam PDF, campos, extração nativa, OCR regional, arquivos CSV/X
 - indicação de `texto nativo` ou `OCR` nos resultados;
 - indicação dos métodos usados na prévia e exportação do lote;
 - erro amigável por campo quando o Tesseract ou o idioma não está disponível;
+- renomeação dos PDFs processados usando os valores extraídos;
+- prefixo opcional e escolha da ordem dos campos no nome do arquivo;
+- prévia `nome atual → novo nome` antes de confirmar a renomeação;
+- proteção contra campos vazios, caracteres inválidos, nomes repetidos e sobrescrita;
 - mensagens amigáveis para PDFs inválidos ou corrompidos;
 - configuração básica de logging.
 
