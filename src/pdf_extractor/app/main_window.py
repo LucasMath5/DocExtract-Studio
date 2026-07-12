@@ -18,11 +18,13 @@ from PySide6.QtWidgets import (
 from pdf_extractor.app.batch_controller import BatchController
 from pdf_extractor.app.field_panel import FieldPanel
 from pdf_extractor.app.extraction_result_table import ExtractionResultTable
+from pdf_extractor.app.pdf_split_dialog import PdfSplitDialog
 from pdf_extractor.app.pdf_viewer import PdfViewer
 from pdf_extractor.app.template_controller import TemplateController
 from pdf_extractor.core.extraction_service import ExtractionService
 from pdf_extractor.core.field_manager import FieldManager, FieldValidationError
 from pdf_extractor.core.pdf_service import PdfService, PdfServiceError
+from pdf_extractor.core.pdf_split_service import PdfSplitError, PdfSplitService
 from pdf_extractor.exporters.base import (
     ExportError,
     TabularExporter,
@@ -53,6 +55,7 @@ class MainWindow(QMainWindow):
     def __init__(self, pdf_service: PdfService | None = None) -> None:
         super().__init__()
         self.pdf_service = pdf_service or PdfService()
+        self.pdf_split_service = PdfSplitService()
         self.extraction_service = ExtractionService(self.pdf_service)
         self.field_manager = FieldManager()
         self.template_controller = TemplateController(
@@ -91,6 +94,12 @@ class MainWindow(QMainWindow):
         self.open_pdf_action.setStatusTip("Abrir um documento PDF")
         self.open_pdf_action.triggered.connect(self._select_pdf)
 
+        self.split_pdf_action = QAction("Dividir PDF...", self)
+        self.split_pdf_action.setStatusTip(
+            "Gerar PDFs menores e excluir páginas selecionadas"
+        )
+        self.split_pdf_action.triggered.connect(self._select_pdf_to_split)
+
         self.new_template_action = self.template_controller.new_action
         self.save_template_action = self.template_controller.save_action
         self.import_template_action = self.template_controller.import_action
@@ -108,6 +117,7 @@ class MainWindow(QMainWindow):
         """Build the application menu bar."""
         file_menu = self.menuBar().addMenu("Arquivo")
         file_menu.addAction(self.open_pdf_action)
+        file_menu.addAction(self.split_pdf_action)
         file_menu.addSeparator()
         file_menu.addAction(self.exit_action)
 
@@ -121,6 +131,30 @@ class MainWindow(QMainWindow):
         batch_menu = self.menuBar().addMenu("Lote")
         batch_menu.addAction(self.batch_files_action)
         batch_menu.addAction(self.batch_folder_action)
+
+    def _select_pdf_to_split(self) -> None:
+        """Select a source PDF and open its split configuration dialog."""
+        selected_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Selecionar PDF para dividir",
+            "",
+            "Documentos PDF (*.pdf)",
+        )
+        if not selected_path:
+            return
+        source_path = Path(selected_path)
+        try:
+            page_count = self.pdf_split_service.page_count(source_path)
+        except PdfSplitError as error:
+            QMessageBox.critical(self, "Erro ao abrir PDF", str(error))
+            return
+        dialog = PdfSplitDialog(
+            source_path,
+            page_count,
+            self,
+            self.pdf_split_service,
+        )
+        dialog.exec()
 
     def _create_keyboard_shortcuts(self) -> None:
         """Register page navigation and zoom shortcuts for the window."""

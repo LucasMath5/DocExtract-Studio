@@ -45,6 +45,7 @@ def test_main_window_has_expected_initial_state(application: QApplication) -> No
     assert not window.windowIcon().isNull()
     assert "Nenhum documento carregado" in window.pdf_viewer.page_canvas.text()
     assert window.open_pdf_action.text() == "Abrir PDF"
+    assert window.split_pdf_action.text() == "Dividir PDF..."
     assert window.exit_action.text() == "Sair"
     assert window.new_template_action.text() == "Novo template"
     assert window.save_template_action.text() == "Salvar template"
