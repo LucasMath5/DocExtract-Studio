@@ -8,7 +8,8 @@ from pathlib import Path
 
 import fitz
 import pytest
-from PySide6.QtCore import QElapsedTimer, QPoint, Qt
+from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 
@@ -220,6 +221,44 @@ def test_keyboard_shortcuts_navigate_and_control_zoom(
         Qt.Key.Key_Minus,
         Qt.KeyboardModifier.ControlModifier,
     )
+    assert window.pdf_viewer.zoom_indicator.text() == "100%"
+    window.close()
+
+
+def test_ctrl_mouse_wheel_controls_zoom_by_direction(
+    application: QApplication,
+    tmp_path: Path,
+) -> None:
+    """Ctrl+wheel should zoom while an unmodified wheel keeps normal behavior."""
+    pdf_path = tmp_path / "zoom_roda.pdf"
+    create_synthetic_pdf(pdf_path)
+    window = MainWindow()
+    window._load_pdf(pdf_path)
+    window.show()
+    application.processEvents()
+    viewport = window.pdf_viewer.scroll_area.viewport()
+
+    def send_wheel(delta: int, modifiers: Qt.KeyboardModifier) -> None:
+        event = QWheelEvent(
+            QPointF(30, 30),
+            QPointF(30, 30),
+            QPoint(),
+            QPoint(0, delta),
+            Qt.MouseButton.NoButton,
+            modifiers,
+            Qt.ScrollPhase.ScrollUpdate,
+            False,
+        )
+        QApplication.sendEvent(viewport, event)
+        application.processEvents()
+
+    send_wheel(120, Qt.KeyboardModifier.ControlModifier)
+    assert window.pdf_viewer.zoom_indicator.text() == "125%"
+
+    send_wheel(-120, Qt.KeyboardModifier.ControlModifier)
+    assert window.pdf_viewer.zoom_indicator.text() == "100%"
+
+    send_wheel(-120, Qt.KeyboardModifier.NoModifier)
     assert window.pdf_viewer.zoom_indicator.text() == "100%"
     window.close()
 

@@ -79,6 +79,7 @@ Os testes verificam PDF, campos, extração nativa, OCR regional, arquivos CSV/X
 - navegação entre páginas com controles habilitados conforme os limites;
 - zoom entre 50% e 300%, com redefinição para 100%;
 - atalhos `←` e `→` para navegar, `Ctrl++` e `Ctrl+-` para controlar o zoom;
+- zoom com `Ctrl + roda do mouse`: para cima aumenta e para baixo diminui;
 - ícone próprio na janela, no alternador de tarefas e na barra de tarefas;
 - criação de múltiplos campos nomeados a partir de seleções retangulares;
 - painel lateral para selecionar, renomear e excluir campos;

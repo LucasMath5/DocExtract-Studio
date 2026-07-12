@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QWheelEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -16,6 +16,25 @@ from PySide6.QtWidgets import (
 
 from pdf_extractor.app.pdf_page_canvas import PdfPageCanvas
 from pdf_extractor.models.extraction_field import ExtractionField
+
+
+class PdfScrollArea(QScrollArea):
+    """Scroll PDF pages normally and request zoom while Ctrl is pressed."""
+
+    zoom_out_requested = Signal()
+    zoom_in_requested = Signal()
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+        """Convert Ctrl+wheel direction into one zoom step."""
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            delta = event.angleDelta().y() or event.pixelDelta().y()
+            if delta > 0:
+                self.zoom_in_requested.emit()
+            elif delta < 0:
+                self.zoom_out_requested.emit()
+            event.accept()
+            return
+        super().wheelEvent(event)
 
 
 class PdfViewer(QWidget):
@@ -54,7 +73,9 @@ class PdfViewer(QWidget):
         separator.setFrameShadow(QFrame.Shadow.Sunken)
 
         self.zoom_out_button = QPushButton("-")
-        self.zoom_out_button.setToolTip("Diminuir zoom (Ctrl+-)")
+        self.zoom_out_button.setToolTip(
+            "Diminuir zoom (Ctrl+- ou Ctrl+rolar para baixo)"
+        )
         self.zoom_out_button.setFixedWidth(36)
         self.zoom_out_button.clicked.connect(self.zoom_out_requested.emit)
 
@@ -63,7 +84,7 @@ class PdfViewer(QWidget):
         self.zoom_indicator.setMinimumWidth(52)
 
         self.zoom_in_button = QPushButton("+")
-        self.zoom_in_button.setToolTip("Aumentar zoom (Ctrl++)")
+        self.zoom_in_button.setToolTip("Aumentar zoom (Ctrl++ ou Ctrl+rolar para cima)")
         self.zoom_in_button.setFixedWidth(36)
         self.zoom_in_button.clicked.connect(self.zoom_in_requested.emit)
 
@@ -90,7 +111,9 @@ class PdfViewer(QWidget):
             self.field_delete_requested.emit
         )
 
-        self.scroll_area = QScrollArea()
+        self.scroll_area = PdfScrollArea()
+        self.scroll_area.zoom_out_requested.connect(self.zoom_out_requested.emit)
+        self.scroll_area.zoom_in_requested.connect(self.zoom_in_requested.emit)
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setWidget(self.page_canvas)
