@@ -9,6 +9,7 @@ from pathlib import Path
 
 from pdf_extractor.models.batch_result import BatchDocumentResult
 from pdf_extractor.models.extraction_field import ExtractionField
+from pdf_extractor.models.extraction_result import ExtractionResult
 
 
 INVALID_FILENAME_CHARACTERS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -32,6 +33,10 @@ class RenamePlanStatus(StrEnum):
     CONFLICT = "conflito"
     RENAMED = "renomeado"
     ERROR = "erro"
+
+
+class PdfFilenameError(ValueError):
+    """Represent extracted values that cannot produce a valid PDF name."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,13 +104,49 @@ class PdfRenameService:
             self._build_document_item(
                 index,
                 document,
-                field_names,
+                fields,
                 pattern,
-                prefix,
             )
             for index, document in enumerate(documents)
         ]
         return self._mark_destination_conflicts(items)
+
+    def compose_filename(
+        self,
+        results: tuple[ExtractionResult, ...],
+        fields: tuple[ExtractionField, ...],
+        pattern: RenamePattern,
+    ) -> str:
+        """Compose one safe PDF filename using the shared rename rules."""
+        field_names = {field.id: field.name for field in fields}
+        unknown_fields = [
+            field_id for field_id in pattern.field_ids if field_id not in field_names
+        ]
+        if unknown_fields:
+            raise PdfFilenameError(
+                "O padrão contém campos que não existem no template."
+            )
+        prefix = self.sanitize_component(pattern.prefix) if pattern.prefix else ""
+        if pattern.prefix.strip() and not prefix:
+            raise PdfFilenameError(
+                "O prefixo não contém caracteres válidos."
+            )
+
+        values_by_field = {result.field_id: result.value for result in results}
+        components = [prefix] if prefix else []
+        for field_id in pattern.field_ids:
+            value = self.sanitize_component(values_by_field.get(field_id, ""))
+            if not value:
+                raise PdfFilenameError(
+                    f'O campo "{field_names[field_id]}" está vazio.'
+                )
+            components.append(value)
+
+        stem = pattern.separator.join(components)[: self.MAX_STEM_LENGTH]
+        stem = stem.rstrip(" .")
+        if stem.upper() in WINDOWS_RESERVED_NAMES:
+            stem = f"_{stem}"
+        return f"{stem}.pdf"
 
     def apply(
         self,
@@ -171,9 +212,8 @@ class PdfRenameService:
         self,
         index: int,
         document: BatchDocumentResult,
-        field_names: dict[str, str],
+        fields: tuple[ExtractionField, ...],
         pattern: RenamePattern,
-        prefix: str,
     ) -> RenamePlanItem:
         if not document.file_path.is_file():
             return self._invalid_item(
@@ -181,23 +221,15 @@ class PdfRenameService:
                 document,
                 "O arquivo de origem não existe.",
             )
-        results = {result.field_id: result.value for result in document.results}
-        components = [prefix] if prefix else []
-        for field_id in pattern.field_ids:
-            value = self.sanitize_component(results.get(field_id, ""))
-            if not value:
-                return self._invalid_item(
-                    index,
-                    document,
-                    f'O campo "{field_names[field_id]}" está vazio.',
-                )
-            components.append(value)
-
-        stem = pattern.separator.join(components)[: self.MAX_STEM_LENGTH]
-        stem = stem.rstrip(" .")
-        if stem.upper() in WINDOWS_RESERVED_NAMES:
-            stem = f"_{stem}"
-        destination = document.file_path.with_name(f"{stem}.pdf")
+        try:
+            file_name = self.compose_filename(
+                document.results,
+                fields,
+                pattern,
+            )
+        except PdfFilenameError as error:
+            return self._invalid_item(index, document, str(error))
+        destination = document.file_path.with_name(file_name)
         if destination.name.casefold() == document.file_path.name.casefold():
             return RenamePlanItem(
                 index,

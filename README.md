@@ -84,6 +84,11 @@ Os testes verificam PDF, campos, extração nativa, OCR regional, arquivos CSV/X
 - exclusão de páginas ou intervalos, como `2, 5-7`, durante a divisão;
 - prévia dos grupos e nomes dos PDFs antes da geração;
 - proteção contra sobrescrita dos arquivos divididos;
+- aplicação de um template a cada página de um PDF multipágina;
+- exclusão de páginas que não devem ser analisadas nem geradas;
+- geração de PDFs individuais já nomeados pelos valores extraídos;
+- prefixo opcional, seleção e ordenação dos campos usados no nome;
+- análise em segundo plano com progresso, cancelamento e prévia dos arquivos;
 - ícone próprio na janela, no alternador de tarefas e na barra de tarefas;
 - criação de múltiplos campos nomeados a partir de seleções retangulares;
 - painel lateral para selecionar, renomear e excluir campos;

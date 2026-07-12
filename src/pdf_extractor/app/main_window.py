@@ -19,12 +19,15 @@ from pdf_extractor.app.batch_controller import BatchController
 from pdf_extractor.app.field_panel import FieldPanel
 from pdf_extractor.app.extraction_result_table import ExtractionResultTable
 from pdf_extractor.app.pdf_split_dialog import PdfSplitDialog
+from pdf_extractor.app.page_template_dialog import PageTemplateDialog
 from pdf_extractor.app.pdf_viewer import PdfViewer
 from pdf_extractor.app.template_controller import TemplateController
 from pdf_extractor.core.extraction_service import ExtractionService
 from pdf_extractor.core.field_manager import FieldManager, FieldValidationError
 from pdf_extractor.core.pdf_service import PdfService, PdfServiceError
 from pdf_extractor.core.pdf_split_service import PdfSplitError, PdfSplitService
+from pdf_extractor.core.page_template_service import PageTemplateService
+from pdf_extractor.core.template_service import TemplateError, TemplateService
 from pdf_extractor.exporters.base import (
     ExportError,
     TabularExporter,
@@ -56,6 +59,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.pdf_service = pdf_service or PdfService()
         self.pdf_split_service = PdfSplitService()
+        self.page_template_service = PageTemplateService()
+        self.template_file_service = TemplateService()
         self.extraction_service = ExtractionService(self.pdf_service)
         self.field_manager = FieldManager()
         self.template_controller = TemplateController(
@@ -108,6 +113,17 @@ class MainWindow(QMainWindow):
         self.batch_files_action = self.batch_controller.select_files_action
         self.batch_folder_action = self.batch_controller.select_folder_action
 
+        self.page_template_action = QAction(
+            "Aplicar template às páginas...",
+            self,
+        )
+        self.page_template_action.setStatusTip(
+            "Gerar um PDF nomeado para cada página selecionada"
+        )
+        self.page_template_action.triggered.connect(
+            self._select_pdf_pages_for_template
+        )
+
         self.exit_action = QAction("Sair", self)
         self.exit_action.setShortcut("Ctrl+Q")
         self.exit_action.setStatusTip("Fechar a aplicação")
@@ -131,6 +147,8 @@ class MainWindow(QMainWindow):
         batch_menu = self.menuBar().addMenu("Lote")
         batch_menu.addAction(self.batch_files_action)
         batch_menu.addAction(self.batch_folder_action)
+        batch_menu.addSeparator()
+        batch_menu.addAction(self.page_template_action)
 
     def _select_pdf_to_split(self) -> None:
         """Select a source PDF and open its split configuration dialog."""
@@ -153,6 +171,53 @@ class MainWindow(QMainWindow):
             page_count,
             self,
             self.pdf_split_service,
+        )
+        dialog.exec()
+
+    def _select_pdf_pages_for_template(self) -> None:
+        """Select a PDF and template for independent per-page processing."""
+        selected_pdf, _ = QFileDialog.getOpenFileName(
+            self,
+            "Selecionar PDF com múltiplas páginas",
+            "",
+            "Documentos PDF (*.pdf)",
+        )
+        if not selected_pdf:
+            return
+        source_path = Path(selected_pdf)
+        try:
+            page_count = self.pdf_split_service.page_count(source_path)
+        except PdfSplitError as error:
+            QMessageBox.critical(self, "Erro ao abrir PDF", str(error))
+            return
+
+        selected_template, _ = QFileDialog.getOpenFileName(
+            self,
+            "Selecionar template das páginas",
+            "",
+            "Templates JSON (*.json)",
+        )
+        if not selected_template:
+            return
+        try:
+            template = self.template_file_service.load(Path(selected_template))
+        except TemplateError as error:
+            QMessageBox.critical(self, "Template inválido", str(error))
+            return
+        if not template.fields:
+            QMessageBox.warning(
+                self,
+                "Template sem campos",
+                "O template selecionado não possui campos para extrair.",
+            )
+            return
+
+        dialog = PageTemplateDialog(
+            source_path,
+            page_count,
+            template,
+            self,
+            self.page_template_service,
         )
         dialog.exec()
 

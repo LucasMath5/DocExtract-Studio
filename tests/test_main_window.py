@@ -53,6 +53,7 @@ def test_main_window_has_expected_initial_state(application: QApplication) -> No
     assert window.export_template_action.text() == "Exportar template..."
     assert window.batch_files_action.text() == "Processar PDFs..."
     assert window.batch_folder_action.text() == "Processar pasta..."
+    assert window.page_template_action.text() == "Aplicar template às páginas..."
     assert window.pdf_viewer.page_indicator.text() == "Página 0 de 0"
     assert not window.pdf_viewer.previous_button.isEnabled()
     assert not window.pdf_viewer.next_button.isEnabled()
